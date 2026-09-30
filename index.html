@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SmartStore - Inventory and Sales Management System">
+  <title>SmartStore | Inventory & Sales Management</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-icon">S</div>
+        <div>
+          <h1>SmartStore</h1>
+          <span>Store Management</span>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-section="dashboard"><span>⌂</span> Dashboard</button>
+        <button class="nav-item" data-section="products"><span>▣</span> Products</button>
+        <button class="nav-item" data-section="inventory"><span>▤</span> Inventory</button>
+        <button class="nav-item" data-section="sales"><span>◉</span> Sales & Billing</button>
+        <button class="nav-item" data-section="customers"><span>♙</span> Customers</button>
+        <button class="nav-item" data-section="suppliers"><span>♧</span> Suppliers</button>
+        <button class="nav-item" data-section="reports"><span>◫</span> Reports</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="store-status"><span class="status-dot"></span> Store is active</div>
+        <small>Inventory & Sales Management</small>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn mobile-menu" id="menuBtn" aria-label="Open menu">☰</button>
+        <div class="page-heading">
+          <span class="eyebrow">SMARTSTORE</span>
+          <h2 id="pageTitle">Dashboard</h2>
+        </div>
+        <div class="top-actions">
+          <div class="date-chip" id="today"></div>
+          <button class="icon-btn" id="themeBtn" title="Toggle theme">◐</button>
+          <div class="avatar">A</div>
+        </div>
+      </header>
+
+      <div class="content">
+        <!-- DASHBOARD -->
+        <section class="section active" id="dashboard">
+          <div class="hero">
+            <div>
+              <p class="hero-kicker">STORE OVERVIEW</p>
+              <h3>Good day, Admin 👋</h3>
+              <p>Monitor inventory, sales and store performance from one place.</p>
+            </div>
+            <button class="primary-btn" data-go="sales">＋ Create Sale</button>
+          </div>
+
+          <div class="stats-grid">
+            <article class="stat-card">
+              <div class="stat-icon purple">▣</div>
+              <div><span>Total Products</span><strong id="statProducts">0</strong><small id="statCategories">0 categories</small></div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-icon green">₹</div>
+              <div><span>Total Revenue</span><strong id="statRevenue">₹0</strong><small id="statOrders">0 orders</small></div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-icon orange">!</div>
+              <div><span>Low Stock</span><strong id="statLowStock">0</strong><small>Needs attention</small></div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-icon blue">♙</div>
+              <div><span>Customers</span><strong id="statCustomers">0</strong><small>Registered customers</small></div>
+            </article>
+          </div>
+
+          <div class="two-col">
+            <article class="card">
+              <div class="card-head"><div><h3>Sales Overview</h3><p>Recent 7-day revenue</p></div><span class="badge">Live</span></div>
+              <div class="chart" id="salesChart"></div>
+            </article>
+            <article class="card">
+              <div class="card-head"><div><h3>Stock Status</h3><p>Current inventory health</p></div></div>
+              <div class="donut-wrap">
+                <div class="donut" id="stockDonut"><div><strong id="stockHealthy">0%</strong><span>Healthy</span></div></div>
+                <div class="legend">
+                  <div><i class="dot green-dot"></i> Healthy <b id="healthyCount">0</b></div>
+                  <div><i class="dot orange-dot"></i> Low stock <b id="lowCount">0</b></div>
+                  <div><i class="dot red-dot"></i> Out of stock <b id="outCount">0</b></div>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <article class="card">
+            <div class="card-head"><div><h3>Recent Sales</h3><p>Latest store transactions</p></div><button class="text-btn" data-go="sales">View all →</button></div>
+            <div class="table-wrap"><table><thead><tr><th>Invoice</th><th>Customer</th><th>Date</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>
+              <tbody id="recentSales"></tbody></table></div>
+          </article>
+        </section>
+
+        <!-- PRODUCTS -->
+        <section class="section" id="products">
+          <div class="section-head">
+            <div><p class="eyebrow">CATALOG</p><h3>Products</h3><p>Manage your store product catalog.</p></div>
+            <button class="primary-btn" id="addProductBtn">＋ Add Product</button>
+          </div>
+          <div class="toolbar">
+            <div class="search-box">⌕ <input id="productSearch" placeholder="Search products..."></div>
+            <select id="categoryFilter"><option value="all">All categories</option></select>
+            <select id="stockFilter"><option value="all">All stock</option><option value="healthy">Healthy</option><option value="low">Low stock</option><option value="out">Out of stock</option></select>
+            <select id="productSort"><option value="default">Sort: Default</option><option value="name">Name A–Z</option><option value="priceLow">Price: Low to High</option><option value="priceHigh">Price: High to Low</option><option value="stockLow">Stock: Low to High</option></select>
+          </div>
+          <article class="card"><div class="table-wrap"><table><thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Action</th></tr></thead><tbody id="productTable"></tbody></table></div></article>
+        </section>
+
+        <!-- INVENTORY -->
+        <section class="section" id="inventory">
+          <div class="section-head"><div><p class="eyebrow">STOCK CONTROL</p><h3>Inventory</h3><p>Track stock levels and update quantities.</p></div></div>
+          <div class="inventory-grid" id="inventoryCards"></div>
+          <article class="card"><div class="card-head"><div><h3>Inventory List</h3><p>Quick stock adjustment</p></div></div>
+            <div class="table-wrap"><table><thead><tr><th>Product</th><th>Current Stock</th><th>Minimum</th><th>Status</th><th>Adjust</th></tr></thead><tbody id="inventoryTable"></tbody></table></div>
+          </article>
+        </section>
+
+        <!-- SALES -->
+        <section class="section" id="sales">
+          <div class="section-head"><div><p class="eyebrow">TRANSACTIONS</p><h3>Sales & Billing</h3><p>Create a customer invoice and automatically update stock.</p></div></div>
+          <div class="billing-layout">
+            <article class="card">
+              <div class="card-head"><div><h3>New Sale</h3><p>Select products to add to the cart.</p></div></div>
+              <div class="toolbar compact"><div class="search-box">⌕ <input id="saleSearch" placeholder="Search product..."></div></div>
+              <div class="product-picker" id="productPicker"></div>
+            </article>
+            <article class="card cart-card">
+              <div class="card-head"><div><h3>Cart</h3><p id="cartCount">0 items</p></div><button class="text-btn" id="clearCart">Clear</button></div>
+              <div id="cartItems" class="cart-items"></div>
+              <div class="bill-summary">
+                <label>Customer <select id="saleCustomer"><option value="">Walk-in Customer</option></select></label>
+                <div><span>Subtotal</span><b id="billSubtotal">₹0</b></div>
+                <div><span>Discount</span><input type="number" id="discount" value="0" min="0"></div>
+                <div><span>Tax (5%)</span><b id="billTax">₹0</b></div>
+                <div class="grand"><span>Total</span><b id="billTotal">₹0</b></div>
+                <button class="primary-btn wide" id="completeSale">Complete Sale</button>
+              </div>
+            </article>
+          </div>
+          <div class="mini-summary">
+            <div><span>Today's Sales</span><b id="todaySales">₹0</b></div>
+            <div><span>Transactions</span><b id="todayTransactions">0</b></div>
+            <div><span>Average Bill</span><b id="averageBill">₹0</b></div>
+          </div>
+          <article class="card">
+            <div class="card-head"><div><h3>Sales History</h3><p>All completed transactions</p></div></div>
+            <div class="table-wrap"><table><thead><tr><th>Invoice</th><th>Customer</th><th>Date</th><th>Items</th><th>Total</th><th>Action</th></tr></thead><tbody id="salesTable"></tbody></table></div>
+          </article>
+        </section>
+
+        <!-- CUSTOMERS -->
+        <section class="section" id="customers">
+          <div class="section-head"><div><p class="eyebrow">CUSTOMER CRM</p><h3>Customers</h3><p>Maintain customer details and purchase activity.</p></div><button class="primary-btn" id="addCustomerBtn">＋ Add Customer</button></div>
+          <div class="toolbar"><div class="search-box">⌕ <input id="customerSearch" placeholder="Search customers..."></div></div>
+          <article class="card"><div class="table-wrap"><table><thead><tr><th>Customer</th><th>Phone</th><th>Email</th><th>Purchases</th><th>Total Spent</th><th>Action</th></tr></thead><tbody id="customerTable"></tbody></table></div></article>
+        </section>
+
+        <!-- SUPPLIERS -->
+        <section class="section" id="suppliers">
+          <div class="section-head"><div><p class="eyebrow">SUPPLY CHAIN</p><h3>Suppliers</h3><p>Keep supplier contact information organized.</p></div><button class="primary-btn" id="addSupplierBtn">＋ Add Supplier</button></div>
+          <article class="card"><div class="table-wrap"><table><thead><tr><th>Supplier</th><th>Company</th><th>Phone</th><th>Email</th><th>Products</th><th>Action</th></tr></thead><tbody id="supplierTable"></tbody></table></div></article>
+        </section>
+
+        <!-- REPORTS -->
+        <section class="section" id="reports">
+          <div class="section-head"><div><p class="eyebrow">ANALYTICS</p><h3>Reports</h3><p>Quick business insights from your store data.</p></div><button class="secondary-btn" id="exportBtn">⇩ Export JSON</button></div>
+          <div class="stats-grid report-stats">
+            <article class="stat-card"><div class="stat-icon green">₹</div><div><span>Revenue</span><strong id="reportRevenue">₹0</strong><small>All completed sales</small></div></article>
+            <article class="stat-card"><div class="stat-icon blue">▣</div><div><span>Inventory Value</span><strong id="reportInventory">₹0</strong><small>Cost at listed price</small></div></article>
+            <article class="stat-card"><div class="stat-icon purple">★</div><div><span>Top Product</span><strong id="reportTopProduct">—</strong><small>By quantity sold</small></div></article>
+            <article class="stat-card"><div class="stat-icon orange">!</div><div><span>Stock Alerts</span><strong id="reportAlerts">0</strong><small>Low + out of stock</small></div></article>
+          </div>
+          <div class="two-col">
+            <article class="card"><div class="card-head"><div><h3>Top Products</h3><p>Based on completed sales</p></div></div><div id="topProducts" class="rank-list"></div></article>
+            <article class="card"><div class="card-head"><div><h3>Category Distribution</h3><p>Products by category</p></div></div><div id="categoryReport" class="category-list"></div></article>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal" id="modal"></div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script src="index.js"></script>
+</body>
+</html>
