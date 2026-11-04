@@ -1,287 +1,1773 @@
-const KEY = "smartstore_data_v1";
+/**
+ * SmartStore - Full-Stack Inventory & Sales Management System
+ * Review 02 - Web Technologies Lab Evaluation
+ * Student: Sagar Dhakal | Roll No: 24CS275 | BE CSE IIIrd Year
+ * Subject: U21CS501 & U21CS504 Web Technologies Theory and Lab
+ * 
+ * Connected directly to PHP 8.2 & MySQL/MariaDB JSON endpoints.
+ */
 
-const seed = {
-  products: [
-    {id:1,name:"Wireless Keyboard",sku:"KB-101",category:"Electronics",price:1299,stock:24,min:8},
-    {id:2,name:"Wireless Mouse",sku:"MS-204",category:"Electronics",price:799,stock:7,min:10},
-    {id:3,name:"USB-C Cable",sku:"CB-310",category:"Accessories",price:499,stock:38,min:10},
-    {id:4,name:"Notebook A5",sku:"NB-405",category:"Stationery",price:99,stock:62,min:15},
-    {id:5,name:"Ball Pen Pack",sku:"PN-511",category:"Stationery",price:149,stock:9,min:12},
-    {id:6,name:"Water Bottle",sku:"WB-602",category:"Lifestyle",price:599,stock:0,min:8},
-    {id:7,name:"Desk Lamp",sku:"DL-703",category:"Home",price:1499,stock:14,min:5},
-    {id:8,name:"Power Bank",sku:"PB-804",category:"Electronics",price:1899,stock:16,min:6}
-  ],
-  customers: [
-    {id:1,name:"Aarav Kumar",phone:"9876543210",email:"aarav@example.com"},
-    {id:2,name:"Priya Sharma",phone:"9123456780",email:"priya@example.com"},
-    {id:3,name:"Rahul Nair",phone:"9988776655",email:"rahul@example.com"}
-  ],
-  suppliers: [
-    {id:1,name:"TechWorld Supplies",company:"TechWorld Pvt. Ltd.",phone:"9000011111",email:"sales@techworld.example",products:12},
-    {id:2,name:"OfficeMart",company:"OfficeMart Traders",phone:"9000022222",email:"contact@officemart.example",products:18},
-    {id:3,name:"HomePlus",company:"HomePlus Distributors",phone:"9000033333",email:"hello@homeplus.example",products:8}
-  ],
-  sales: [
-    {id:"INV-1004",customer:"Priya Sharma",date:"2026-09-30",items:[{name:"Wireless Keyboard",qty:1}],total:1363.95},
-    {id:"INV-1003",customer:"Aarav Kumar",date:"2026-09-29",items:[{name:"USB-C Cable",qty:2}],total:1047.90},
-    {id:"INV-1002",customer:"Walk-in Customer",date:"2026-09-28",items:[{name:"Desk Lamp",qty:1}],total:1573.95}
-  ]
+// Global Application State
+const state = {
+  products: [],
+  categories: [],
+  customers: [],
+  suppliers: [],
+  sales: [],
+  analytics: null,
+  cart: [],
+  connection: {
+    connected: false,
+    database: '',
+    version: '',
+    error: ''
+  },
+  activeSection: 'dashboard',
+  editingProductId: null,
+  editingCustomerId: null,
+  editingSupplierId: null
 };
 
-let data = loadData();
-let cart = [];
-let editingProductId = null;
-let editingCustomerId = null;
-let editingSupplierId = null;
+// DOM Selectors Helper
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => [...document.querySelectorAll(selector)];
 
-const $ = (s) => document.querySelector(s);
-const $$ = (s) => [...document.querySelectorAll(s)];
-const money = (n) => "₹" + Number(n || 0).toLocaleString("en-IN",{maximumFractionDigits:2});
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+// Formatting Utilities
+const money = (num) => '₹' + Number(num || 0).toLocaleString('en-IN', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+});
 
-function loadData(){
-  try { return JSON.parse(localStorage.getItem(KEY)) || structuredClone(seed); }
-  catch { return structuredClone(seed); }
-}
-function saveData(){ localStorage.setItem(KEY, JSON.stringify(data)); renderAll(); }
-function nextId(list){ return list.length ? Math.max(...list.map(x => Number(x.id)||0))+1 : 1; }
-function stockStatus(p){
-  if(p.stock <= 0) return ["Out of stock","red"];
-  if(p.stock <= p.min) return ["Low stock","orange"];
-  return ["Healthy","green"];
-}
-function showToast(msg){
-  const t=$("#toast"); t.textContent=msg; t.classList.add("show");
-  clearTimeout(window.toastTimer); window.toastTimer=setTimeout(()=>t.classList.remove("show"),2200);
-}
+const esc = (str) => String(str ?? '').replace(/[&<>"']/g, (m) => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#039;'
+}[m]));
 
-function navigate(section){
-  $$(".section").forEach(s=>s.classList.toggle("active",s.id===section));
-  $$(".nav-item").forEach(b=>b.classList.toggle("active",b.dataset.section===section));
-  const titles={dashboard:"Dashboard",products:"Products",inventory:"Inventory","sales":"Sales & Billing",customers:"Customers",suppliers:"Suppliers",reports:"Reports"};
-  $("#pageTitle").textContent=titles[section] || "Dashboard";
-  if(window.innerWidth<=760) $("#sidebar").classList.remove("open");
-  window.scrollTo({top:0,behavior:"smooth"});
-}
-$$(".nav-item").forEach(b=>b.addEventListener("click",()=>navigate(b.dataset.section)));
-$$("[data-go]").forEach(b=>b.addEventListener("click",()=>navigate(b.dataset.go)));
+// Toast Notification System
+function showToast(message, type = 'success') {
+  const container = $('#toastContainer');
+  if (!container) return;
 
-function renderDashboard(){
-  const revenue=data.sales.reduce((a,s)=>a+Number(s.total),0);
-  const cats=new Set(data.products.map(p=>p.category)).size;
-  const low=data.products.filter(p=>p.stock>0&&p.stock<=p.min).length;
-  $("#statProducts").textContent=data.products.length;
-  $("#statCategories").textContent=`${cats} categories`;
-  $("#statRevenue").textContent=money(revenue);
-  $("#statOrders").textContent=`${data.sales.length} orders`;
-  $("#statLowStock").textContent=low;
-  $("#statCustomers").textContent=data.customers.length;
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
 
-  const recent=[...data.sales].reverse().slice(0,5);
-  $("#recentSales").innerHTML=recent.length ? recent.map(s=>`<tr><td><b>${esc(s.id)}</b></td><td>${esc(s.customer)}</td><td>${esc(s.date)}</td><td>${s.items.reduce((a,i)=>a+i.qty,0)}</td><td><b>${money(s.total)}</b></td><td><span class="pill green">Completed</span></td></tr>`).join("") : `<tr><td colspan="6"><div class="empty">No sales yet.</div></td></tr>`;
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('show'));
 
-  renderSalesChart();
-  const healthy=data.products.filter(p=>p.stock>p.min).length, lows=low, out=data.products.filter(p=>p.stock<=0).length, total=data.products.length||1;
-  const healthyPct=Math.round(healthy/total*100);
-  $("#stockHealthy").textContent=healthyPct+"%"; $("#healthyCount").textContent=healthy; $("#lowCount").textContent=lows; $("#outCount").textContent=out;
-  $("#stockDonut").style.background=`conic-gradient(var(--green) 0 ${healthy/total*100}%,var(--orange) ${healthy/total*100}% ${(healthy+lows)/total*100}%,var(--red) ${(healthy+lows)/total*100}% 100%)`;
-}
-function renderSalesChart(){
-  const days=[]; const now=new Date();
-  for(let i=6;i>=0;i--){const d=new Date(now);d.setDate(now.getDate()-i);const key=d.toISOString().slice(0,10);const value=data.sales.filter(s=>s.date===key).reduce((a,s)=>a+s.total,0);days.push({key,value,label:d.toLocaleDateString("en-IN",{weekday:"short"})});}
-  const max=Math.max(...days.map(d=>d.value),1);
-  $("#salesChart").innerHTML=days.map(d=>`<div class="bar-col"><div class="bar" style="height:${Math.max(4,d.value/max*82)}%" title="${money(d.value)}"></div><small>${d.label}</small></div>`).join("");
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3200);
 }
 
-function populateCategories(){
-  const select=$("#categoryFilter"); const current=select.value;
-  const cats=[...new Set(data.products.map(p=>p.category))].sort();
-  select.innerHTML=`<option value="all">All categories</option>`+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
-  if(cats.includes(current)) select.value=current;
+// Universal Modal System
+function openModal(htmlContent) {
+  const overlay = $('#modalOverlay');
+  const box = $('#modalBox');
+  if (!overlay || !box) return;
+
+  box.innerHTML = htmlContent;
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
-function renderProducts(){
-  populateCategories();
-  const q=$("#productSearch").value.toLowerCase(), cat=$("#categoryFilter").value, sf=$("#stockFilter").value;
-  const sort=$("#productSort").value;
-  let list=data.products.filter(p=>{
-    const status=stockStatus(p)[1];
-    return (!q || `${p.name} ${p.sku} ${p.category}`.toLowerCase().includes(q)) && (cat==="all"||p.category===cat) && (sf==="all"||sf===status);
+
+function closeModal() {
+  const overlay = $('#modalOverlay');
+  if (!overlay) return;
+
+  overlay.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+$('#modalOverlay')?.addEventListener('click', (e) => {
+  if (e.target.id === 'modalOverlay') closeModal();
+});
+
+// Confirmation Dialog Utility
+function showConfirm(title, message, onConfirm) {
+  openModal(`
+    <div class="modal-header">
+      <div>
+        <h3>${esc(title)}</h3>
+        <p>${esc(message)}</p>
+      </div>
+      <button class="modal-close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button type="button" class="btn btn-danger" id="confirmActionBtn">Confirm</button>
+    </div>
+  `);
+
+  $('#confirmActionBtn')?.addEventListener('click', () => {
+    closeModal();
+    if (typeof onConfirm === 'function') onConfirm();
   });
-  list=[...list];
-  if(sort==="name") list.sort((a,b)=>a.name.localeCompare(b.name));
-  if(sort==="priceLow") list.sort((a,b)=>a.price-b.price);
-  if(sort==="priceHigh") list.sort((a,b)=>b.price-a.price);
-  if(sort==="stockLow") list.sort((a,b)=>a.stock-b.stock);
-  $("#productTable").innerHTML=list.length?list.map(p=>{
-    const [label,cls]=stockStatus(p);
-    return `<tr><td><span class="product-name">${esc(p.name)}</span></td><td class="muted">${esc(p.sku)}</td><td>${esc(p.category)}</td><td><b>${money(p.price)}</b></td><td>${p.stock}</td><td><span class="pill ${cls}">${label}</span></td><td><div class="row-actions"><button class="small-btn" onclick="openProductModal(${p.id})">Edit</button><button class="small-btn danger" onclick="deleteProduct(${p.id})">Delete</button></div></td></tr>`;
-  }).join(""):`<tr><td colspan="7"><div class="empty">No products found.</div></td></tr>`;
 }
-function renderInventory(){
-  const healthy=data.products.filter(p=>p.stock>p.min).length, low=data.products.filter(p=>p.stock>0&&p.stock<=p.min).length, out=data.products.filter(p=>p.stock<=0).length;
-  $("#inventoryCards").innerHTML=[
-    ["Healthy Stock",healthy,"Products above minimum","green"],
-    ["Low Stock",low,"Products needing reorder","orange"],
-    ["Out of Stock",out,"Products unavailable","red"]
-  ].map(x=>`<div class="inventory-mini"><h4>${x[0]}</h4><strong>${x[1]}</strong><p>${x[2]}</p></div>`).join("");
-  $("#inventoryTable").innerHTML=data.products.map(p=>{
-    const [label,cls]=stockStatus(p);
-    return `<tr><td><b>${esc(p.name)}</b><br><span class="muted">${esc(p.sku)}</span></td><td><b>${p.stock}</b></td><td>${p.min}</td><td><span class="pill ${cls}">${label}</span></td><td><div class="row-actions"><button class="small-btn" onclick="adjustStock(${p.id},-1)">−1</button><button class="small-btn" onclick="adjustStock(${p.id},1)">＋1</button><button class="small-btn" onclick="adjustStock(${p.id},5)">＋5</button></div></td></tr>`;
-  }).join("");
+
+// =========================================================================
+// API CLIENT - Async Fetch from PHP Backend
+// =========================================================================
+const API = {
+  baseUrl: 'api',
+
+  async get(endpoint, params = {}) {
+    const url = new URL(`${this.baseUrl}/${endpoint}`, window.location.href);
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') {
+        url.searchParams.append(k, v);
+      }
+    });
+
+    try {
+      const res = await fetch(url.toString(), {
+        headers: { 'Accept': 'application/json' }
+      });
+      return await res.json();
+    } catch (err) {
+      console.error(`GET ${endpoint} failed:`, err);
+      return { success: false, message: 'Network connection to server failed.' };
+    }
+  },
+
+  async post(endpoint, body = {}) {
+    try {
+      const res = await fetch(`${this.baseUrl}/${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      return await res.json();
+    } catch (err) {
+      console.error(`POST ${endpoint} failed:`, err);
+      return { success: false, message: 'Server communication error.' };
+    }
+  },
+
+  async put(endpoint, body = {}) {
+    try {
+      const res = await fetch(`${this.baseUrl}/${endpoint}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      return await res.json();
+    } catch (err) {
+      console.error(`PUT ${endpoint} failed:`, err);
+      return { success: false, message: 'Update failed due to network error.' };
+    }
+  },
+
+  async delete(endpoint, params = {}) {
+    const url = new URL(`${this.baseUrl}/${endpoint}`, window.location.href);
+    Object.entries(params).forEach(([k, v]) => url.searchParams.append(k, v));
+
+    try {
+      const res = await fetch(url.toString(), {
+        method: 'DELETE',
+        headers: { 'Accept': 'application/json' }
+      });
+      return await res.json();
+    } catch (err) {
+      console.error(`DELETE ${endpoint} failed:`, err);
+      return { success: false, message: 'Delete operation failed.' };
+    }
+  }
+};
+
+// =========================================================================
+// NAVIGATION & ROUTING
+// =========================================================================
+function navigate(section) {
+  state.activeSection = section;
+
+  // Toggle sections
+  $$('.section').forEach((sec) => {
+    sec.classList.toggle('active', sec.id === `${section}Section`);
+  });
+
+  // Toggle active nav buttons
+  $$('.nav-item').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.section === section);
+  });
+
+  // Update Breadcrumb & Heading
+  const titles = {
+    dashboard: 'Dashboard Overview',
+    products: 'Product Catalog',
+    inventory: 'Stock Inventory Control',
+    sales: 'Sales & Billing Checkout',
+    customers: 'Customers CRM',
+    suppliers: 'Suppliers & Purchases',
+    reports: 'Business Reports & Analytics',
+    audit: 'Stock Movement Audit Log'
+  };
+
+  const breadcrumbs = {
+    dashboard: 'SMARTSTORE / OVERVIEW',
+    products: 'SMARTSTORE / PRODUCTS CATALOG',
+    inventory: 'SMARTSTORE / INVENTORY CONTROL',
+    sales: 'SMARTSTORE / POINT OF SALE',
+    customers: 'SMARTSTORE / CUSTOMER CRM',
+    suppliers: 'SMARTSTORE / SUPPLY CHAIN',
+    reports: 'SMARTSTORE / REPORTS & ANALYTICS',
+    audit: 'SMARTSTORE / AUDIT JOURNAL'
+  };
+
+  $('#pageHeading').textContent = titles[section] || 'Dashboard';
+  $('#pageBreadcrumb').textContent = breadcrumbs[section] || 'SMARTSTORE';
+
+  // Close mobile sidebar if open
+  $('#sidebar')?.classList.remove('open');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Specific section refresh
+  if (section === 'audit') loadAuditLog();
+  if (section === 'reports') loadAnalytics();
 }
-function renderPicker(){
-  const q=$("#saleSearch").value.toLowerCase();
-  const list=data.products.filter(p=>p.stock>0 && (!q||`${p.name} ${p.sku}`.toLowerCase().includes(q)));
-  $("#productPicker").innerHTML=list.length?list.map(p=>`<div class="pick-card" onclick="addToCart(${p.id})"><h4>${esc(p.name)}</h4><p>${esc(p.sku)} · ${p.stock} available</p><b>${money(p.price)}</b></div>`).join(""):`<div class="empty">No available products.</div>`;
+
+// Bind navigation clicks
+$$('.nav-item').forEach((btn) => {
+  btn.addEventListener('click', () => navigate(btn.dataset.section));
+});
+
+document.addEventListener('click', (e) => {
+  const target = e.target.closest('[data-navigate]');
+  if (target) {
+    navigate(target.dataset.navigate);
+  }
+});
+
+// Mobile menu toggle
+$('#menuToggleBtn')?.addEventListener('click', () => {
+  $('#sidebar')?.classList.toggle('open');
+});
+
+// Theme switcher (Persisted in localStorage)
+$('#themeToggleBtn')?.addEventListener('click', () => {
+  document.body.classList.toggle('dark');
+  const isDark = document.body.classList.contains('dark');
+  localStorage.setItem('smartstore_theme', isDark ? 'dark' : 'light');
+  updateThemeIcons(isDark);
+});
+
+function updateThemeIcons(isDark) {
+  const sun = $('#themeIconSun');
+  const moon = $('#themeIconMoon');
+  if (sun && moon) {
+    sun.style.display = isDark ? 'block' : 'none';
+    moon.style.display = isDark ? 'none' : 'block';
+  }
 }
-function addToCart(id){
-  const p=data.products.find(x=>x.id===id); if(!p||p.stock<=0)return;
-  const item=cart.find(x=>x.id===id);
-  if(item){ if(item.qty>=p.stock)return showToast("Maximum available stock reached."); item.qty++; }
-  else cart.push({id,qty:1});
+
+// Load initial theme preference
+if (localStorage.getItem('smartstore_theme') === 'dark') {
+  document.body.classList.add('dark');
+  updateThemeIcons(true);
+}
+
+// =========================================================================
+// DATA FETCHING & SYNCHRONIZATION
+// =========================================================================
+async function checkSystemStatus() {
+  const res = await API.get('status.php');
+
+  const dot = $('#dbPulseDot');
+  const text = $('#dbStatusText');
+  const sub = $('#dbStatusSub');
+  const liveBadge = $('#liveBadge');
+  const liveBadgeText = $('#liveBadgeText');
+
+  if (res.success && res.data?.status === 'healthy') {
+    state.connection = {
+      connected: true,
+      database: res.data.database,
+      version: res.data.server_version,
+      error: ''
+    };
+    if (dot) dot.className = 'pulse-dot';
+    if (text) text.textContent = 'MySQL Connected';
+    if (sub) sub.textContent = `${res.data.server_version} · ${res.data.database}`;
+    if (liveBadge) liveBadge.className = 'badge healthy';
+    if (liveBadgeText) liveBadgeText.textContent = 'MySQL Live';
+  } else {
+    state.connection = {
+      connected: false,
+      database: '',
+      version: '',
+      error: res.message || 'Database unreachable'
+    };
+    if (dot) dot.className = 'pulse-dot error';
+    if (text) text.textContent = 'MySQL Disconnected';
+    if (sub) sub.textContent = 'Check XAMPP services';
+    if (liveBadge) liveBadge.className = 'badge danger';
+    if (liveBadgeText) liveBadgeText.textContent = 'Offline / Error';
+
+    showToast('Database connection failed. Ensure MySQL is running in XAMPP.', 'error');
+  }
+}
+
+async function loadAllData() {
+  await checkSystemStatus();
+  await Promise.all([
+    loadProducts(),
+    loadCategories(),
+    loadCustomers(),
+    loadSuppliers(),
+    loadSales(),
+    loadAnalytics()
+  ]);
+}
+
+async function loadProducts() {
+  const search = $('#productSearchInput')?.value || '';
+  const category = $('#productCategoryFilter')?.value || 'all';
+  const stock = $('#productStockFilter')?.value || 'all';
+  const sort = $('#productSortFilter')?.value || 'default';
+
+  const res = await API.get('products.php', {
+    search,
+    category,
+    stock_status: stock,
+    sort
+  });
+
+  if (res.success && Array.isArray(res.data)) {
+    state.products = res.data;
+    renderProducts();
+    renderInventory();
+    renderProductPicker();
+    $('#navProductCount').textContent = state.products.length;
+  }
+}
+
+async function loadCategories() {
+  const res = await API.get('categories.php');
+  if (res.success && Array.isArray(res.data)) {
+    state.categories = res.data;
+    populateCategoryFilters();
+  }
+}
+
+async function loadCustomers() {
+  const search = $('#customerSearchInput')?.value || '';
+  const res = await API.get('customers.php', { search });
+  if (res.success && Array.isArray(res.data)) {
+    state.customers = res.data;
+    renderCustomers();
+    populateCustomerDropdown();
+  }
+}
+
+async function loadSuppliers() {
+  const search = $('#supplierSearchInput')?.value || '';
+  const res = await API.get('suppliers.php', { search });
+  if (res.success && Array.isArray(res.data)) {
+    state.suppliers = res.data;
+    renderSuppliers();
+  }
+}
+
+async function loadSales() {
+  const res = await API.get('sales.php', { limit: 50 });
+  if (res.success && Array.isArray(res.data)) {
+    state.sales = res.data;
+    renderSalesHistory();
+  }
+}
+
+async function loadAnalytics() {
+  const res = await API.get('analytics.php');
+  if (res.success && res.data) {
+    state.analytics = res.data;
+    renderDashboard();
+    renderReports();
+  }
+}
+
+async function loadAuditLog() {
+  const tbody = $('#auditTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Loading stock audit movements...</td></tr>`;
+  const res = await API.get('stock.php', { limit: 100 });
+
+  if (res.success && Array.isArray(res.data)) {
+    if (!res.data.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No stock movements recorded yet.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = res.data.map((m) => {
+      const typeClasses = {
+        SALE: 'badge danger',
+        PURCHASE: 'badge healthy',
+        ADJUSTMENT_ADD: 'badge healthy',
+        ADJUSTMENT_SUB: 'badge low',
+        INITIAL: 'badge info'
+      };
+      const badgeCls = typeClasses[m.movement_type] || 'badge info';
+      const deltaSign = m.quantity > 0 ? `+${m.quantity}` : `${m.quantity}`;
+
+      return `
+        <tr>
+          <td class="cell-sub">${esc(m.created_at)}</td>
+          <td><b>${esc(m.product_name)}</b><br><span class="cell-sub">${esc(m.sku)}</span></td>
+          <td><span class="${badgeCls}">${esc(m.movement_type)}</span></td>
+          <td><b style="color:${m.quantity >= 0 ? 'var(--green)' : 'var(--red)'}">${deltaSign}</b></td>
+          <td>${m.previous_stock}</td>
+          <td><b>${m.new_stock}</b></td>
+          <td><span class="cell-sub">${esc(m.reference_id || '—')}</span><br>${esc(m.notes || '')}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+}
+
+// =========================================================================
+// RENDERING MODULES
+// =========================================================================
+
+// 1. Dashboard
+function renderDashboard() {
+  if (!state.analytics) return;
+  const summary = state.analytics.summary || {};
+
+  $('#kpiProducts').textContent = summary.total_products || 0;
+  $('#kpiCategories').textContent = `${summary.total_categories || 0} categories`;
+  $('#kpiTotalUnits').textContent = `${summary.total_units || 0} units`;
+  $('#kpiRevenue').textContent = money(summary.total_revenue);
+  $('#kpiValuation').textContent = money(summary.inventory_retail_value);
+  $('#kpiCostValuation').textContent = `Cost: ${money(summary.inventory_cost_value)}`;
+  $('#kpiLowStock').textContent = summary.low_stock_count || 0;
+  $('#kpiOutStock').textContent = `${summary.out_of_stock_count || 0} out of stock`;
+
+  // Low Stock Banner
+  const alertCount = (summary.low_stock_count || 0) + (summary.out_of_stock_count || 0);
+  const banner = $('#lowStockBanner');
+  const bannerText = $('#lowStockBannerText');
+  const navBadge = $('#navLowStockBadge');
+
+  if (alertCount > 0) {
+    if (banner) banner.style.display = 'flex';
+    if (bannerText) bannerText.textContent = `${alertCount} product${alertCount > 1 ? 's' : ''} require immediate inventory reorder or restocking.`;
+    if (navBadge) {
+      navBadge.style.display = 'inline-block';
+      navBadge.textContent = alertCount;
+    }
+  } else {
+    if (banner) banner.style.display = 'none';
+    if (navBadge) navBadge.style.display = 'none';
+  }
+
+  // 7-Day Sales Bar Chart
+  const chartEl = $('#dashboardSalesChart');
+  const chartDays = state.analytics.chart_7days || [];
+  const maxRevenue = Math.max(...chartDays.map((d) => d.revenue), 1);
+
+  if (chartEl) {
+    chartEl.innerHTML = chartDays.map((d) => {
+      const heightPct = Math.max(8, Math.round((d.revenue / maxRevenue) * 90));
+      return `
+        <div class="bar-column">
+          <div class="bar-fill" style="height:${heightPct}%" title="${d.label} (${d.date}): ${money(d.revenue)} (${d.orders} orders)"></div>
+          <span class="bar-label">${d.label}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Stock Health Donut
+  const healthy = summary.healthy_stock_count || 0;
+  const low = summary.low_stock_count || 0;
+  const out = summary.out_of_stock_count || 0;
+  const total = (healthy + low + out) || 1;
+
+  const healthyPct = Math.round((healthy / total) * 100);
+  const lowPct = Math.round((low / total) * 100);
+
+  $('#healthyPctText').textContent = `${healthyPct}%`;
+  $('#healthyCountVal').textContent = healthy;
+  $('#lowCountVal').textContent = low;
+  $('#outCountVal').textContent = out;
+
+  const donut = $('#stockDonutVisual');
+  if (donut) {
+    donut.style.background = `conic-gradient(
+      var(--green) 0% ${healthyPct}%,
+      var(--orange) ${healthyPct}% ${healthyPct + lowPct}%,
+      var(--red) ${healthyPct + lowPct}% 100%
+    )`;
+  }
+
+  // Recent Sales Table
+  const recentTbody = $('#dashboardRecentSalesTbody');
+  const recent = state.analytics.recent_sales || [];
+
+  if (recentTbody) {
+    if (!recent.length) {
+      recentTbody.innerHTML = `<tr><td colspan="7" class="empty-state">No sales recorded yet.</td></tr>`;
+      return;
+    }
+
+    recentTbody.innerHTML = recent.map((s) => `
+      <tr>
+        <td><b>${esc(s.invoice_no)}</b></td>
+        <td>${esc(s.customer)}</td>
+        <td class="cell-sub">${esc(s.date)}</td>
+        <td>${s.items_qty} item${s.items_qty == 1 ? '' : 's'}</td>
+        <td><b>${money(s.total)}</b></td>
+        <td><span class="badge healthy">Completed</span></td>
+        <td>
+          <button class="btn btn-sm btn-outline" onclick="showInvoiceModal('${esc(s.invoice_no)}')">Invoice</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+}
+
+// 2. Product Catalog
+function populateCategoryFilters() {
+  const filter = $('#productCategoryFilter');
+  if (!filter) return;
+
+  const curr = filter.value;
+  const cats = state.categories.map((c) => c.name);
+
+  filter.innerHTML = `<option value="all">All Categories</option>` +
+    cats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+
+  if (cats.includes(curr)) filter.value = curr;
+}
+
+function renderProducts() {
+  const tbody = $('#productsTableBody');
+  if (!tbody) return;
+
+  if (!state.products.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No products found matching your filter criteria.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = state.products.map((p) => {
+    let badgeClass = 'healthy';
+    let badgeText = 'Healthy';
+
+    if (p.stock <= 0) {
+      badgeClass = 'out';
+      badgeText = 'Out of Stock';
+    } else if (p.stock <= p.min) {
+      badgeClass = 'low';
+      badgeText = 'Low Stock';
+    }
+
+    return `
+      <tr>
+        <td>
+          <div class="cell-primary">${esc(p.name)}</div>
+          <div class="cell-sub">Unit: ${esc(p.unit || 'pcs')}</div>
+        </td>
+        <td>
+          <b>${esc(p.sku)}</b>
+          ${p.barcode ? `<div class="cell-sub">${esc(p.barcode)}</div>` : ''}
+        </td>
+        <td><span class="badge purple">${esc(p.category || 'Uncategorized')}</span></td>
+        <td class="cell-sub">${money(p.cost_price)}</td>
+        <td><b>${money(p.price)}</b></td>
+        <td>
+          <b>${p.stock}</b> <span class="cell-sub">/ min ${p.min}</span>
+        </td>
+        <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+        <td>
+          <div class="table-actions">
+            <button class="btn btn-sm btn-secondary" onclick="openProductModal(${p.id})">Edit</button>
+            <button class="btn btn-sm btn-outline" onclick="openQuickAdjustModal(${p.id})" title="Adjust Stock">±</button>
+            <button class="btn btn-sm btn-outline" style="color:var(--red);" onclick="deleteProduct(${p.id})">Delete</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// 3. Inventory Stock Control
+function renderInventory() {
+  const tbody = $('#inventoryTableBody');
+  if (!tbody) return;
+
+  const healthy = state.products.filter((p) => p.stock > p.min).length;
+  const low = state.products.filter((p) => p.stock > 0 && p.stock <= p.min).length;
+  const out = state.products.filter((p) => p.stock <= 0).length;
+
+  $('#invHealthyCount').textContent = healthy;
+  $('#invLowCount').textContent = low;
+  $('#invOutCount').textContent = out;
+
+  tbody.innerHTML = state.products.map((p) => {
+    let statusClass = 'healthy';
+    let statusLabel = 'Healthy';
+    if (p.stock <= 0) {
+      statusClass = 'out';
+      statusLabel = 'Out of Stock';
+    } else if (p.stock <= p.min) {
+      statusClass = 'low';
+      statusLabel = 'Low Stock';
+    }
+
+    return `
+      <tr>
+        <td>
+          <b>${esc(p.name)}</b>
+          <div class="cell-sub">SKU: ${esc(p.sku)} · Category: ${esc(p.category)}</div>
+        </td>
+        <td><strong style="font-size:15px;">${p.stock}</strong></td>
+        <td>${p.min}</td>
+        <td><span class="badge ${statusClass}">${statusLabel}</span></td>
+        <td>
+          <div class="table-actions">
+            <button class="btn btn-sm btn-secondary" onclick="quickStockDelta(${p.id}, -5)">−5</button>
+            <button class="btn btn-sm btn-secondary" onclick="quickStockDelta(${p.id}, -1)">−1</button>
+            <button class="btn btn-sm btn-secondary" onclick="quickStockDelta(${p.id}, 1)">＋1</button>
+            <button class="btn btn-sm btn-secondary" onclick="quickStockDelta(${p.id}, 5)">＋5</button>
+            <button class="btn btn-sm btn-outline" onclick="openQuickAdjustModal(${p.id})">Custom</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function quickStockDelta(productId, delta) {
+  const res = await API.post('stock.php', { id: productId, delta, notes: `Quick button adjust (${delta > 0 ? '+' : ''}${delta})` });
+  if (res.success) {
+    showToast(res.message);
+    await Promise.all([loadProducts(), loadAnalytics()]);
+  } else {
+    showToast(res.message, 'error');
+  }
+}
+
+// 4. POS Billing & Cart
+function populateCustomerDropdown() {
+  const sel = $('#posCustomerSelect');
+  if (!sel) return;
+
+  const current = sel.value;
+  sel.innerHTML = `<option value="Walk-in Customer">Walk-in Customer (General)</option>` +
+    state.customers.map((c) => `<option value="${esc(c.name)}">${esc(c.name)} (${esc(c.phone)})</option>`).join('');
+
+  if (current) sel.value = current;
+}
+
+function renderProductPicker() {
+  const grid = $('#posProductPickerGrid');
+  if (!grid) return;
+
+  const q = ($('#posProductSearch')?.value || '').toLowerCase().trim();
+  const available = state.products.filter((p) => p.stock > 0 && (!q || `${p.name} ${p.sku} ${p.category}`.toLowerCase().includes(q)));
+
+  if (!available.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;">No available in-stock products found.</div>`;
+    return;
+  }
+
+  grid.innerHTML = available.map((p) => `
+    <div class="pick-product-card" onclick="addToCart(${p.id})">
+      <h4>${esc(p.name)}</h4>
+      <div class="pick-meta">${esc(p.sku)} · <span class="badge healthy" style="font-size:10px;padding:2px 6px;">${p.stock} in stock</span></div>
+      <div class="pick-card-foot">
+        <span class="pick-price">${money(p.price)}</span>
+        <button class="pick-add-btn" aria-label="Add to cart">＋</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function addToCart(productId) {
+  const prod = state.products.find((p) => p.id === productId);
+  if (!prod) return;
+
+  if (prod.stock <= 0) {
+    showToast(`'${prod.name}' is currently out of stock.`, 'error');
+    return;
+  }
+
+  const existing = state.cart.find((c) => c.id === productId);
+  if (existing) {
+    if (existing.qty >= prod.stock) {
+      showToast(`Cannot add more. Available stock limit is ${prod.stock}.`, 'error');
+      return;
+    }
+    existing.qty++;
+  } else {
+    state.cart.push({
+      id: prod.id,
+      name: prod.name,
+      price: prod.price,
+      stock: prod.stock,
+      qty: 1
+    });
+  }
+
   renderCart();
 }
-function renderCart(){
-  const count=cart.reduce((a,x)=>a+x.qty,0); $("#cartCount").textContent=`${count} item${count===1?"":"s"}`;
-  $("#cartItems").innerHTML=cart.length?cart.map(c=>{const p=data.products.find(x=>x.id===c.id);return `<div class="cart-row"><div><h4>${esc(p.name)}</h4><small>${money(p.price)} × ${c.qty}</small><div class="qty"><button onclick="changeCart(${p.id},-1)">−</button><span>${c.qty}</span><button onclick="changeCart(${p.id},1)">＋</button></div></div><b>${money(p.price*c.qty)}</b></div>`}).join(""):`<div class="empty-cart">Your cart is empty.<br>Add products to start a sale.</div>`;
-  const sub=cart.reduce((a,c)=>{const p=data.products.find(x=>x.id===c.id);return a+p.price*c.qty},0);
-  const disc=Math.max(0,Number($("#discount").value)||0), taxable=Math.max(0,sub-disc), tax=taxable*.05, total=taxable+tax;
-  $("#billSubtotal").textContent=money(sub); $("#billTax").textContent=money(tax); $("#billTotal").textContent=money(total);
+
+function changeCartQty(productId, delta) {
+  const item = state.cart.find((c) => c.id === productId);
+  const prod = state.products.find((p) => p.id === productId);
+  if (!item || !prod) return;
+
+  item.qty += delta;
+
+  if (item.qty <= 0) {
+    state.cart = state.cart.filter((c) => c.id !== productId);
+  } else if (item.qty > prod.stock) {
+    item.qty = prod.stock;
+    showToast(`Maximum available stock is ${prod.stock}.`, 'warning');
+  }
+
+  renderCart();
 }
-function changeCart(id,delta){
-  const c=cart.find(x=>x.id===id); const p=data.products.find(x=>x.id===id); if(!c)return;
-  c.qty+=delta; if(c.qty<=0)cart=cart.filter(x=>x.id!==id); if(c.qty>p.stock)c.qty=p.stock; renderCart();
+
+function removeFromCart(productId) {
+  state.cart = state.cart.filter((c) => c.id !== productId);
+  renderCart();
 }
-$("#clearCart").addEventListener("click",()=>{cart=[];renderCart()});
-$("#discount").addEventListener("input",renderCart);
-$("#saleSearch").addEventListener("input",renderPicker);
-$("#completeSale").addEventListener("click",()=>{
-  if(!cart.length)return showToast("Add at least one product.");
-  const customer=$("#saleCustomer").value || "Walk-in Customer";
-  const sub=cart.reduce((a,c)=>a+data.products.find(p=>p.id===c.id).price*c.qty,0);
-  const disc=Math.max(0,Number($("#discount").value)||0), tax=Math.max(0,sub-disc)*.05, total=Math.max(0,sub-disc)+tax;
-  const items=cart.map(c=>{const p=data.products.find(x=>x.id===c.id);p.stock-=c.qty;return {name:p.name,qty:c.qty};});
-  const num=1000+data.sales.length+1;
-  data.sales.push({id:`INV-${num}`,customer,date:new Date().toISOString().slice(0,10),items,total:Number(total.toFixed(2))});
-  cart=[];$("#discount").value=0;saveData();renderCart();renderPicker();showToast("Sale completed successfully.");
+
+function renderCart() {
+  const countEl = $('#posCartItemCount');
+  const listEl = $('#posCartItemsList');
+  const totalCount = state.cart.reduce((sum, i) => sum + i.qty, 0);
+
+  if (countEl) countEl.textContent = `${totalCount} item${totalCount === 1 ? '' : 's'}`;
+
+  if (!state.cart.length) {
+    listEl.innerHTML = `<div class="empty-state">Cart is empty.<br>Click items on the left to start billing.</div>`;
+    $('#posSubtotalText').textContent = money(0);
+    $('#posTaxText').textContent = money(0);
+    $('#posGrandTotalText').textContent = money(0);
+    return;
+  }
+
+  listEl.innerHTML = state.cart.map((item) => `
+    <div class="cart-row">
+      <div class="cart-item-info">
+        <h5>${esc(item.name)}</h5>
+        <span>${money(item.price)} × ${item.qty}</span>
+        <div class="cart-qty-ctrl">
+          <button class="qty-btn" onclick="changeCartQty(${item.id}, -1)">−</button>
+          <span class="qty-val">${item.qty}</span>
+          <button class="qty-btn" onclick="changeCartQty(${item.id}, 1)">＋</button>
+          <button class="qty-btn" style="color:var(--red);margin-left:4px;" onclick="removeFromCart(${item.id})">✕</button>
+        </div>
+      </div>
+      <div class="cart-item-total">${money(item.price * item.qty)}</div>
+    </div>
+  `).join('');
+
+  // Calculations
+  const subtotal = state.cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
+  const discountInput = Math.max(0, Number($('#posDiscountInput')?.value) || 0);
+  const discount = Math.min(subtotal, discountInput);
+  const taxable = Math.max(0, subtotal - discount);
+  const tax = Number((taxable * 0.05).toFixed(2));
+  const grandTotal = Number((taxable + tax).toFixed(2));
+
+  $('#posSubtotalText').textContent = money(subtotal);
+  $('#posTaxText').textContent = money(tax);
+  $('#posGrandTotalText').textContent = money(grandTotal);
+}
+
+$('#posClearCartBtn')?.addEventListener('click', () => {
+  state.cart = [];
+  renderCart();
 });
 
-function renderSales(){
-  const today=new Date().toISOString().slice(0,10);
-  const todays=data.sales.filter(s=>s.date===today);
-  const todayTotal=todays.reduce((a,s)=>a+s.total,0);
-  $("#todaySales").textContent=money(todayTotal);
-  $("#todayTransactions").textContent=todays.length;
-  $("#averageBill").textContent=money(todays.length?todayTotal/todays.length:0);
-  $("#salesTable").innerHTML=data.sales.slice().reverse().map(s=>`<tr><td><b>${esc(s.id)}</b></td><td>${esc(s.customer)}</td><td>${esc(s.date)}</td><td>${s.items.map(i=>`${esc(i.name)} × ${i.qty}`).join(", ")}</td><td><b>${money(s.total)}</b></td><td><button class="small-btn" onclick="showInvoice('${s.id}')">Invoice</button></td></tr>`).join("") || `<tr><td colspan="6"><div class="empty">No completed sales.</div></td></tr>`;
-  $("#saleCustomer").innerHTML=`<option value="">Walk-in Customer</option>`+data.customers.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join("");
-}
-function renderCustomers(){
-  const q=$("#customerSearch").value.toLowerCase();
-  const list=data.customers.filter(c=>`${c.name} ${c.phone} ${c.email}`.toLowerCase().includes(q));
-  $("#customerTable").innerHTML=list.map(c=>{
-    const sales=data.sales.filter(s=>s.customer===c.name); const spent=sales.reduce((a,s)=>a+s.total,0);
-    return `<tr><td><b>${esc(c.name)}</b></td><td>${esc(c.phone)}</td><td>${esc(c.email)}</td><td>${sales.length}</td><td><b>${money(spent)}</b></td><td><div class="row-actions"><button class="small-btn" onclick="openCustomerModal(${c.id})">Edit</button><button class="small-btn danger" onclick="deleteCustomer(${c.id})">Delete</button></div></td></tr>`;
-  }).join("")||`<tr><td colspan="6"><div class="empty">No customers found.</div></td></tr>`;
-}
-function renderSuppliers(){
-  $("#supplierTable").innerHTML=data.suppliers.map(s=>`<tr><td><b>${esc(s.name)}</b></td><td>${esc(s.company)}</td><td>${esc(s.phone)}</td><td>${esc(s.email)}</td><td>${s.products}</td><td><div class="row-actions"><button class="small-btn" onclick="openSupplierModal(${s.id})">Edit</button><button class="small-btn danger" onclick="deleteSupplier(${s.id})">Delete</button></div></td></tr>`).join("")||`<tr><td colspan="6"><div class="empty">No suppliers added.</div></td></tr>`;
-}
-function renderReports(){
-  const revenue=data.sales.reduce((a,s)=>a+s.total,0), inv=data.products.reduce((a,p)=>a+p.price*p.stock,0);
-  const sold={}; data.sales.forEach(s=>s.items.forEach(i=>sold[i.name]=(sold[i.name]||0)+i.qty));
-  const top=Object.entries(sold).sort((a,b)=>b[1]-a[1]); $("#reportRevenue").textContent=money(revenue);$("#reportInventory").textContent=money(inv);$("#reportTopProduct").textContent=top[0]?.[0]||"—";$("#reportAlerts").textContent=data.products.filter(p=>p.stock<=p.min).length;
-  const max=top[0]?.[1]||1;
-  $("#topProducts").innerHTML=top.slice(0,6).map((x,i)=>`<div class="rank-row"><div class="rank-num">${i+1}</div><div><b>${esc(x[0])}</b><div class="progress"><i style="width:${x[1]/max*100}%"></i></div></div><b>${x[1]}</b></div>`).join("")||`<div class="empty">Sales data will appear here.</div>`;
-  const cats={};data.products.forEach(p=>cats[p.category]=(cats[p.category]||0)+1);const total=data.products.length||1;
-  $("#categoryReport").innerHTML=Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(x=>`<div class="cat-row"><span>${esc(x[0])}</span><b>${x[1]} (${Math.round(x[1]/total*100)}%)</b></div>`).join("");
+$('#posDiscountInput')?.addEventListener('input', renderCart);
+$('#posProductSearch')?.addEventListener('input', renderProductPicker);
+
+// Complete Sale Transaction Submission
+$('#posCompleteSaleBtn')?.addEventListener('click', async () => {
+  if (!state.cart.length) {
+    showToast('Add at least one product to the cart before checking out.', 'error');
+    return;
+  }
+
+  const customerName = $('#posCustomerSelect')?.value || 'Walk-in Customer';
+  const paymentMethod = $('#posPaymentMethodSelect')?.value || 'cash';
+  const discount = Math.max(0, Number($('#posDiscountInput')?.value) || 0);
+
+  const payload = {
+    customer: customerName,
+    payment_method: paymentMethod,
+    discount,
+    items: state.cart.map((c) => ({
+      id: c.id,
+      qty: c.qty
+    }))
+  };
+
+  const btn = $('#posCompleteSaleBtn');
+  btn.disabled = true;
+  btn.textContent = 'Processing Transaction...';
+
+  try {
+    const res = await API.post('sales.php', payload);
+    if (res.success && res.data) {
+      showToast(`Sale completed! Invoice ${res.data.invoice_no} generated.`);
+      state.cart = [];
+      if ($('#posDiscountInput')) $('#posDiscountInput').value = 0;
+      renderCart();
+
+      // Refresh database records
+      await Promise.all([loadProducts(), loadSales(), loadAnalytics(), loadCustomers()]);
+
+      // Open print invoice modal automatically
+      showInvoiceModal(res.data.invoice_no);
+    } else {
+      showToast(res.message || 'Transaction failed.', 'error');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg> Complete Sale & Generate Invoice`;
+  }
+});
+
+function renderSalesHistory() {
+  const tbody = $('#salesHistoryTableBody');
+  if (!tbody) return;
+
+  if (!state.sales.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No sales transactions found in ledger.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = state.sales.map((s) => {
+    const itemsSummary = Array.isArray(s.items)
+      ? s.items.map((i) => `${esc(i.name)} × ${i.qty}`).join(', ')
+      : '—';
+
+    return `
+      <tr>
+        <td><b>${esc(s.invoice_no || s.id)}</b></td>
+        <td>${esc(s.customer)}</td>
+        <td class="cell-sub">${esc(s.date)}</td>
+        <td><div class="cell-sub" style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${itemsSummary}</div></td>
+        <td><span class="badge info">${esc(s.payment_method ? s.payment_method.toUpperCase() : 'CASH')}</span></td>
+        <td><b>${money(s.total || s.grand_total)}</b></td>
+        <td>
+          <button class="btn btn-sm btn-outline" onclick="showInvoiceModal('${esc(s.invoice_no || s.id)}')">View Invoice</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 
-function openModal(html){$("#modal").innerHTML=html;$("#modalBackdrop").classList.add("open")}
-function closeModal(){$("#modalBackdrop").classList.remove("open")}
-$("#modalBackdrop").addEventListener("click",e=>{if(e.target.id==="modalBackdrop")closeModal()});
+// 5. Customers CRM
+function renderCustomers() {
+  const tbody = $('#customersTableBody');
+  if (!tbody) return;
 
-function openProductModal(id=null){
-  editingProductId=id;const p=id?data.products.find(x=>x.id===id):{name:"",sku:"",category:"Electronics",price:"",stock:"",min:5};
-  openModal(`<h3>${id?"Edit":"Add"} Product</h3><p>Enter the product information below.</p><form id="productForm"><div class="form-grid">
-  <div class="form-field full"><label>Product Name *</label><input name="name" required value="${esc(p.name)}"></div>
-  <div class="form-field"><label>SKU *</label><input name="sku" required value="${esc(p.sku)}"></div>
-  <div class="form-field"><label>Category *</label><input name="category" required value="${esc(p.category)}"></div>
-  <div class="form-field"><label>Price (₹) *</label><input name="price" type="number" min="0" step=".01" required value="${p.price}"></div>
-  <div class="form-field"><label>Stock *</label><input name="stock" type="number" min="0" required value="${p.stock}"></div>
-  <div class="form-field"><label>Minimum Stock *</label><input name="min" type="number" min="0" required value="${p.min}"></div>
-  </div><div class="modal-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancel</button><button class="primary-btn">${id?"Save Changes":"Add Product"}</button></div></form>`);
-  $("#productForm").addEventListener("submit",e=>{
+  if (!state.customers.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No registered customers found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = state.customers.map((c) => `
+    <tr>
+      <td>
+        <b>${esc(c.name)}</b>
+      </td>
+      <td>${esc(c.phone)}</td>
+      <td>${esc(c.email || '—')}</td>
+      <td class="cell-sub">${esc(c.address || '—')}</td>
+      <td><span class="badge purple">${c.purchases} Orders</span></td>
+      <td><b>${money(c.total_spent)}</b></td>
+      <td>
+        <div class="table-actions">
+          <button class="btn btn-sm btn-secondary" onclick="openCustomerModal(${c.id})">Edit</button>
+          <button class="btn btn-sm btn-outline" style="color:var(--red);" onclick="deleteCustomer(${c.id})">Delete</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// 6. Suppliers
+function renderSuppliers() {
+  const tbody = $('#suppliersTableBody');
+  if (!tbody) return;
+
+  if (!state.suppliers.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No suppliers registered.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = state.suppliers.map((s) => `
+    <tr>
+      <td>
+        <b>${esc(s.company)}</b>
+        <div class="cell-sub">${esc(s.address || '—')}</div>
+      </td>
+      <td>${esc(s.name)}</td>
+      <td>${esc(s.phone)}</td>
+      <td>${esc(s.email || '—')}</td>
+      <td><span class="badge blue">${s.purchase_count || s.products || 0} POs</span></td>
+      <td><b>${money(s.total_purchased || 0)}</b></td>
+      <td>
+        <div class="table-actions">
+          <button class="btn btn-sm btn-secondary" onclick="openSupplierModal(${s.id})">Edit</button>
+          <button class="btn btn-sm btn-outline" style="color:var(--red);" onclick="deleteSupplier(${s.id})">Delete</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// 7. Reports & Analytics
+function renderReports() {
+  if (!state.analytics) return;
+  const summary = state.analytics.summary || {};
+
+  $('#reportRevenue').textContent = money(summary.total_revenue);
+  $('#reportProfit').textContent = money(summary.gross_profit);
+  $('#reportInvValue').textContent = money(summary.inventory_retail_value);
+  $('#reportAlertCount').textContent = (summary.low_stock_count || 0) + (summary.out_of_stock_count || 0);
+
+  // Top Products List
+  const topList = $('#reportTopProductsList');
+  const topProducts = state.analytics.top_products || [];
+  const maxQty = Math.max(...topProducts.map((p) => Number(p.qty_sold)), 1);
+
+  if (topList) {
+    if (!topProducts.length) {
+      topList.innerHTML = `<div class="empty-state">No sales transactions available to rank products.</div>`;
+    } else {
+      topList.innerHTML = topProducts.map((p, idx) => {
+        const widthPct = Math.round((Number(p.qty_sold) / maxQty) * 100);
+        return `
+          <div class="rank-row">
+            <div class="rank-num">${idx + 1}</div>
+            <div class="rank-info">
+              <div class="rank-name">
+                <span><b>${esc(p.name)}</b> (${esc(p.sku)})</span>
+                <b>${p.qty_sold} units · ${money(p.revenue)}</b>
+              </div>
+              <div class="progress-track">
+                <div class="progress-bar" style="width:${widthPct}%"></div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // Category Distribution List
+  const catList = $('#reportCategoryList');
+  const cats = state.analytics.category_breakdown || [];
+  const totalUnits = (summary.total_units || 1);
+
+  if (catList) {
+    if (!cats.length) {
+      catList.innerHTML = `<div class="empty-state">No categories available.</div>`;
+    } else {
+      catList.innerHTML = cats.map((c) => {
+        const pct = Math.round((Number(c.total_stock) / totalUnits) * 100);
+        return `
+          <div class="rank-row">
+            <div class="rank-info">
+              <div class="rank-name">
+                <span><b>${esc(c.category)}</b> (${c.product_count} items)</span>
+                <b>${c.total_stock} units (${pct}%)</b>
+              </div>
+              <div class="progress-track">
+                <div class="progress-bar" style="width:${pct}%;background:var(--secondary);"></div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+}
+
+// =========================================================================
+// MODALS & FORMS
+// =========================================================================
+
+// Product Modal (Add / Edit)
+function openProductModal(id = null) {
+  state.editingProductId = id;
+  const p = id ? state.products.find((x) => x.id === id) : {
+    name: '',
+    sku: '',
+    barcode: '',
+    category: 'Electronics',
+    cost_price: '',
+    price: '',
+    stock: '',
+    min: 5,
+    unit: 'pcs'
+  };
+
+  openModal(`
+    <div class="modal-header">
+      <div>
+        <h3>${id ? 'Edit Product' : 'Add New Product'}</h3>
+        <p>Ensure SKU is unique. Data will be saved directly into MySQL database.</p>
+      </div>
+      <button class="modal-close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <form id="productForm">
+      <div class="form-grid">
+        <div class="form-group full-width">
+          <label class="form-label">Product Name <span class="req">*</span></label>
+          <input type="text" name="name" class="form-control" required value="${esc(p.name)}" placeholder="e.g. Wireless Ergonomic Mouse">
+        </div>
+        <div class="form-group">
+          <label class="form-label">SKU (Unique Code) <span class="req">*</span></label>
+          <input type="text" name="sku" class="form-control" required value="${esc(p.sku)}" placeholder="e.g. MS-204">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Barcode / UPC</label>
+          <input type="text" name="barcode" class="form-control" value="${esc(p.barcode || '')}" placeholder="Optional barcode digits">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category <span class="req">*</span></label>
+          <input type="text" name="category" list="categoryOptionsList" class="form-control" required value="${esc(p.category || 'General')}" placeholder="Select or type new category">
+          <datalist id="categoryOptionsList">
+            ${state.categories.map((c) => `<option value="${esc(c.name)}"></option>`).join('')}
+          </datalist>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Unit of Measure</label>
+          <input type="text" name="unit" class="form-control" value="${esc(p.unit || 'pcs')}" placeholder="pcs, kg, box">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cost Price (₹)</label>
+          <input type="number" name="cost_price" class="form-control" min="0" step="0.01" value="${p.cost_price || 0}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Selling Price (₹) <span class="req">*</span></label>
+          <input type="number" name="price" class="form-control" min="0" step="0.01" required value="${p.price || ''}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Current Stock <span class="req">*</span></label>
+          <input type="number" name="stock" class="form-control" min="0" required value="${p.stock !== undefined ? p.stock : 10}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Min Reorder Level <span class="req">*</span></label>
+          <input type="number" name="min" class="form-control" min="0" required value="${p.min !== undefined ? p.min : 5}">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">${id ? 'Save Changes' : 'Create Product'}</button>
+      </div>
+    </form>
+  `);
+
+  $('#productForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const f=new FormData(e.target);
-    const obj={name:f.get("name").trim(),sku:f.get("sku").trim(),category:f.get("category").trim(),price:Number(f.get("price")),stock:Number(f.get("stock")),min:Number(f.get("min"))};
-    if(!obj.name||!obj.sku||!obj.category||obj.price<0||obj.stock<0||obj.min<0){showToast("Please enter valid product details.");return;}
-    const duplicate=data.products.some(x=>x.sku.toLowerCase()===obj.sku.toLowerCase() && x.id!==editingProductId);
-    if(duplicate){showToast("SKU already exists. Use a unique SKU.");return;}
-    if(editingProductId){Object.assign(data.products.find(x=>x.id===editingProductId),obj);showToast("Product updated.")}else{data.products.push({id:nextId(data.products),...obj});showToast("Product added.")}
-    closeModal();saveData()
+    const fd = new FormData(e.target);
+    const payload = {
+      name: fd.get('name').trim(),
+      sku: fd.get('sku').trim().toUpperCase(),
+      barcode: fd.get('barcode').trim(),
+      category: fd.get('category').trim(),
+      unit: fd.get('unit').trim() || 'pcs',
+      cost_price: Number(fd.get('cost_price')) || 0,
+      price: Number(fd.get('price')),
+      stock: Number(fd.get('stock')),
+      min: Number(fd.get('min'))
+    };
+
+    if (state.editingProductId) {
+      payload.id = state.editingProductId;
+      const res = await API.put('products.php', payload);
+      if (res.success) {
+        showToast('Product updated successfully.');
+        closeModal();
+        await Promise.all([loadProducts(), loadAnalytics(), loadCategories()]);
+      } else {
+        showToast(res.message, 'error');
+      }
+    } else {
+      const res = await API.post('products.php', payload);
+      if (res.success) {
+        showToast('New product added to catalog.');
+        closeModal();
+        await Promise.all([loadProducts(), loadAnalytics(), loadCategories()]);
+      } else {
+        showToast(res.message, 'error');
+      }
+    }
   });
 }
-function deleteProduct(id){if(confirm("Delete this product?")){data.products=data.products.filter(p=>p.id!==id);saveData();showToast("Product deleted.")}}
-function adjustStock(id,delta){const p=data.products.find(x=>x.id===id);p.stock=Math.max(0,p.stock+delta);saveData();showToast(`${p.name} stock updated.`)}
 
-function openCustomerModal(id=null){
-  editingCustomerId=id;const c=id?data.customers.find(x=>x.id===id):{name:"",phone:"",email:""};
-  openModal(`<h3>${id?"Edit":"Add"} Customer</h3><p>Store customer contact details.</p><form id="customerForm"><div class="form-grid">
-  <div class="form-field full"><label>Name *</label><input name="name" required value="${esc(c.name)}"></div>
-  <div class="form-field"><label>Phone *</label><input name="phone" required value="${esc(c.phone)}"></div>
-  <div class="form-field"><label>Email</label><input name="email" type="email" value="${esc(c.email)}"></div>
-  </div><div class="modal-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancel</button><button class="primary-btn">Save Customer</button></div></form>`);
-  $("#customerForm").addEventListener("submit",e=>{e.preventDefault();const f=new FormData(e.target);const obj={name:f.get("name").trim(),phone:f.get("phone").trim(),email:f.get("email").trim()};if(!obj.name||!obj.phone){showToast("Name and phone are required.");return;}if(!/^\\d{10}$/.test(obj.phone)){showToast("Enter a valid 10-digit phone number.");return;}if(editingCustomerId)Object.assign(data.customers.find(x=>x.id===editingCustomerId),obj);else data.customers.push({id:nextId(data.customers),...obj});closeModal();saveData();showToast("Customer saved.")});
+function deleteProduct(id) {
+  const p = state.products.find((x) => x.id === id);
+  if (!p) return;
+
+  showConfirm(
+    'Delete Product',
+    `Are you sure you want to delete '${p.name}' (${p.sku})? If it has historical sales, it will be deactivated to safeguard ledger integrity.`,
+    async () => {
+      const res = await API.delete('products.php', { id });
+      if (res.success) {
+        showToast(res.message);
+        await Promise.all([loadProducts(), loadAnalytics()]);
+      } else {
+        showToast(res.message, 'error');
+      }
+    }
+  );
 }
-function deleteCustomer(id){if(confirm("Delete this customer?")){data.customers=data.customers.filter(c=>c.id!==id);saveData();showToast("Customer deleted.")}}
 
-function openSupplierModal(id=null){
-  editingSupplierId=id;const s=id?data.suppliers.find(x=>x.id===id):{name:"",company:"",phone:"",email:"",products:0};
-  openModal(`<h3>${id?"Edit":"Add"} Supplier</h3><p>Store supplier contact details.</p><form id="supplierForm"><div class="form-grid">
-  <div class="form-field"><label>Contact Name *</label><input name="name" required value="${esc(s.name)}"></div>
-  <div class="form-field"><label>Company *</label><input name="company" required value="${esc(s.company)}"></div>
-  <div class="form-field"><label>Phone *</label><input name="phone" required value="${esc(s.phone)}"></div>
-  <div class="form-field"><label>Email</label><input name="email" type="email" value="${esc(s.email)}"></div>
-  <div class="form-field"><label>Products Supplied</label><input name="products" type="number" min="0" value="${s.products}"></div>
-  </div><div class="modal-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancel</button><button class="primary-btn">Save Supplier</button></div></form>`);
-  $("#supplierForm").addEventListener("submit",e=>{e.preventDefault();const f=new FormData(e.target);const obj={name:f.get("name").trim(),company:f.get("company").trim(),phone:f.get("phone").trim(),email:f.get("email").trim(),products:Number(f.get("products"))||0};if(editingSupplierId)Object.assign(data.suppliers.find(x=>x.id===editingSupplierId),obj);else data.suppliers.push({id:nextId(data.suppliers),...obj});closeModal();saveData();showToast("Supplier saved.")});
-}
-function deleteSupplier(id){if(confirm("Delete this supplier?")){data.suppliers=data.suppliers.filter(s=>s.id!==id);saveData();showToast("Supplier deleted.")}}
+// Quick Stock Adjust Modal
+function openQuickAdjustModal(productId) {
+  const p = state.products.find((x) => x.id === productId);
+  if (!p) return;
 
-function showInvoice(id){
-  const s=data.sales.find(x=>x.id===id);if(!s)return;
-  openModal(`<div class="invoice-printable">
-    <div class="invoice-head">
-      <div><div class="invoice-brand">SmartStore</div><div class="muted">Inventory & Sales Management</div></div>
-      <div class="invoice-meta"><b>${esc(s.id)}</b><br>${esc(s.date)}<br>${esc(s.customer)}</div>
+  openModal(`
+    <div class="modal-header">
+      <div>
+        <h3>Adjust Stock Quantity</h3>
+        <p>Set a new stock level or record reason for manual inventory audit.</p>
+      </div>
+      <button class="modal-close-btn" onclick="closeModal()">✕</button>
     </div>
-    <div class="table-wrap"><table><thead><tr><th>Item</th><th>Qty</th></tr></thead><tbody>${s.items.map(i=>`<tr><td>${esc(i.name)}</td><td>${i.qty}</td></tr>`).join("")}</tbody></table></div>
-    <div class="invoice-total"><span>Grand Total</span><b>${money(s.total)}</b></div>
-  </div>
-  <div class="modal-actions"><button class="secondary-btn" onclick="window.print()">Print Invoice</button><button class="primary-btn" onclick="closeModal()">Close</button></div>`);
+    <form id="stockAdjustForm">
+      <div class="form-grid">
+        <div class="form-group full-width">
+          <label class="form-label">Product</label>
+          <input type="text" class="form-control" value="${esc(p.name)} (${esc(p.sku)})" disabled>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Current Stock Balance</label>
+          <input type="text" class="form-control" value="${p.stock}" disabled>
+        </div>
+        <div class="form-group">
+          <label class="form-label">New Stock Quantity <span class="req">*</span></label>
+          <input type="number" name="new_stock" class="form-control" min="0" required value="${p.stock}">
+        </div>
+        <div class="form-group full-width">
+          <label class="form-label">Adjustment Reason / Notes</label>
+          <input type="text" name="notes" class="form-control" value="Manual stock physical recount" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Update Stock</button>
+      </div>
+    </form>
+  `);
+
+  $('#stockAdjustForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const newStock = Number(fd.get('new_stock'));
+    const notes = fd.get('notes').trim();
+
+    const res = await API.post('stock.php', {
+      id: productId,
+      new_stock: newStock,
+      notes
+    });
+
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+      await Promise.all([loadProducts(), loadAnalytics()]);
+    } else {
+      showToast(res.message, 'error');
+    }
+  });
 }
 
-$("#addProductBtn").addEventListener("click",()=>openProductModal());
-$("#addCustomerBtn").addEventListener("click",()=>openCustomerModal());
-$("#addSupplierBtn").addEventListener("click",()=>openSupplierModal());
-$("#productSearch").addEventListener("input",renderProducts);
-$("#categoryFilter").addEventListener("change",renderProducts);
-$("#stockFilter").addEventListener("change",renderProducts);
-$("#productSort").addEventListener("change",renderProducts);
-$("#customerSearch").addEventListener("input",renderCustomers);
-$("#menuBtn").addEventListener("click",()=>$("#sidebar").classList.toggle("open"));
-$("#themeBtn").addEventListener("click",()=>{document.body.classList.toggle("dark");localStorage.setItem("smartstore_theme",document.body.classList.contains("dark")?"dark":"light")});
-if(localStorage.getItem("smartstore_theme")==="dark")document.body.classList.add("dark");
+// Restock / Purchase Order Modal
+function openRestockModal() {
+  openModal(`
+    <div class="modal-header">
+      <div>
+        <h3>Supplier Restock / Purchase Order</h3>
+        <p>Receive incoming inventory shipments from registered suppliers.</p>
+      </div>
+      <button class="modal-close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <form id="restockForm">
+      <div class="form-grid">
+        <div class="form-group full-width">
+          <label class="form-label">Supplier <span class="req">*</span></label>
+          <select name="supplier_id" class="form-control" required id="restockSupplierSelect">
+            ${state.suppliers.map((s) => `<option value="${s.id}">${esc(s.company)} (${esc(s.name)})</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group full-width">
+          <label class="form-label">Product to Restock <span class="req">*</span></label>
+          <select name="product_id" class="form-control" required id="restockProductSelect">
+            ${state.products.map((p) => `<option value="${p.id}">${esc(p.name)} (${esc(p.sku)}) · In Stock: ${p.stock}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Quantity to Add <span class="req">*</span></label>
+          <input type="number" name="quantity" class="form-control" min="1" value="20" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Unit Cost Price (₹)</label>
+          <input type="number" name="unit_cost" class="form-control" min="0" step="0.01" placeholder="Leave empty for default cost">
+        </div>
+        <div class="form-group full-width">
+          <label class="form-label">Purchase Notes</label>
+          <input type="text" name="notes" class="form-control" value="Direct supplier restocking batch">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Receive Restock</button>
+      </div>
+    </form>
+  `);
 
-$("#exportBtn").addEventListener("click",()=>{
-  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");
-  a.href=url;a.download="smartstore-data.json";a.click();URL.revokeObjectURL(url);showToast("Data exported.");
+  $('#restockForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const supplierId = Number(fd.get('supplier_id'));
+    const productId = Number(fd.get('product_id'));
+    const qty = Number(fd.get('quantity'));
+    const unitCost = Number(fd.get('unit_cost')) || undefined;
+    const notes = fd.get('notes').trim();
+
+    const payload = {
+      supplier_id: supplierId,
+      notes,
+      items: [{
+        product_id: productId,
+        quantity: qty,
+        unit_cost: unitCost
+      }]
+    };
+
+    const res = await API.post('purchases.php', payload);
+    if (res.success) {
+      showToast(res.message);
+      closeModal();
+      await Promise.all([loadProducts(), loadAnalytics(), loadSuppliers()]);
+    } else {
+      showToast(res.message, 'error');
+    }
+  });
+}
+
+// External Fake API Importer Modal (Requirement 11)
+async function openFakeApiModal() {
+  openModal(`
+    <div class="modal-header">
+      <div>
+        <h3>Import from External Mock/Fake API</h3>
+        <p>Staged external catalogue from Fake API. Review and click "Import to MySQL" to store verified records.</p>
+      </div>
+      <button class="modal-close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div id="fakeApiCatalogArea" style="min-height:200px;">
+      <div class="empty-state">Connecting to External Product Catalog API...</div>
+    </div>
+  `);
+
+  const res = await API.get('fake-api.php');
+  const area = $('#fakeApiCatalogArea');
+  if (!area) return;
+
+  if (res.success && res.data?.catalog) {
+    const list = res.data.catalog;
+    area.innerHTML = `
+      <div class="system-alert-banner" style="margin-bottom:16px;">
+        <div>
+          <b>Source:</b> ${esc(res.data.source_origin)} (${esc(res.data.source_type)})<br>
+          <small>${esc(res.data.note)}</small>
+        </div>
+      </div>
+      <div class="table-responsive" style="max-height:360px;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Staged Item</th>
+              <th>Category</th>
+              <th>Suggested SKU</th>
+              <th>Selling Price</th>
+              <th>Stock</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map((item, idx) => `
+              <tr id="fakeRow_${idx}">
+                <td>
+                  <b>${esc(item.name)}</b>
+                  <div class="cell-sub"><span class="badge info">External Demo</span></div>
+                </td>
+                <td>${esc(item.category)}</td>
+                <td><code>${esc(item.suggested_sku)}</code></td>
+                <td><b>${money(item.selling_price)}</b></td>
+                <td>${item.stock_quantity}</td>
+                <td>
+                  <button class="btn btn-sm btn-primary" onclick="importSingleFakeItem(${idx})">
+                    Import to MySQL
+                  </button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+      </div>
+    `;
+
+    window.stagedFakeCatalog = list;
+  } else {
+    area.innerHTML = `<div class="empty-state" style="color:var(--red);">Failed to connect to External Mock API: ${esc(res.message)}</div>`;
+  }
+}
+
+window.importSingleFakeItem = async function(index) {
+  const item = window.stagedFakeCatalog?.[index];
+  if (!item) return;
+
+  const row = $(`#fakeRow_${index}`);
+  if (row) row.style.opacity = '0.5';
+
+  const res = await API.post('fake-api.php', item);
+  if (res.success) {
+    showToast(`'${item.name}' imported and stored into MySQL!`);
+    if (row) {
+      row.innerHTML = `<td colspan="6" style="color:var(--green);font-weight:600;padding:12px 16px;">✓ Successfully imported as product ID #${res.data?.id} (${esc(res.data?.sku)}) into MySQL.</td>`;
+    }
+    await Promise.all([loadProducts(), loadCategories(), loadAnalytics()]);
+  } else {
+    showToast(res.message, 'error');
+    if (row) row.style.opacity = '1';
+  }
+};
+
+// Customer Modal (Add / Edit)
+function openCustomerModal(id = null) {
+  state.editingCustomerId = id;
+  const c = id ? state.customers.find((x) => x.id === id) : { name: '', phone: '', email: '', address: '' };
+
+  openModal(`
+    <div class="modal-header">
+      <div>
+        <h3>${id ? 'Edit Customer' : 'Add New Customer'}</h3>
+        <p>Save customer contact details for billing and CRM purchase tracking.</p>
+      </div>
+      <button class="modal-close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <form id="customerForm">
+      <div class="form-grid">
+        <div class="form-group full-width">
+          <label class="form-label">Full Name <span class="req">*</span></label>
+          <input type="text" name="name" class="form-control" required value="${esc(c.name)}" placeholder="e.g. Priya Sharma">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone Number <span class="req">*</span></label>
+          <input type="tel" name="phone" class="form-control" required value="${esc(c.phone)}" placeholder="e.g. 9876543210">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" name="email" class="form-control" value="${esc(c.email || '')}" placeholder="priya@example.com">
+        </div>
+        <div class="form-group full-width">
+          <label class="form-label">Address / Notes</label>
+          <textarea name="address" class="form-control" rows="2" placeholder="Street, City, State">${esc(c.address || '')}</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">${id ? 'Save Changes' : 'Save Customer'}</button>
+      </div>
+    </form>
+  `);
+
+  $('#customerForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {
+      name: fd.get('name').trim(),
+      phone: fd.get('phone').trim(),
+      email: fd.get('email').trim(),
+      address: fd.get('address').trim()
+    };
+
+    if (state.editingCustomerId) {
+      payload.id = state.editingCustomerId;
+      const res = await API.put('customers.php', payload);
+      if (res.success) {
+        showToast('Customer profile updated.');
+        closeModal();
+        await loadCustomers();
+      } else {
+        showToast(res.message, 'error');
+      }
+    } else {
+      const res = await API.post('customers.php', payload);
+      if (res.success) {
+        showToast('Customer created successfully.');
+        closeModal();
+        await loadCustomers();
+      } else {
+        showToast(res.message, 'error');
+      }
+    }
+  });
+}
+
+function deleteCustomer(id) {
+  const c = state.customers.find((x) => x.id === id);
+  if (!c) return;
+
+  showConfirm(
+    'Delete Customer',
+    `Are you sure you want to delete customer '${c.name}'?`,
+    async () => {
+      const res = await API.delete('customers.php', { id });
+      if (res.success) {
+        showToast(res.message);
+        await loadCustomers();
+      } else {
+        showToast(res.message, 'error');
+      }
+    }
+  );
+}
+
+// Supplier Modal (Add / Edit)
+function openSupplierModal(id = null) {
+  state.editingSupplierId = id;
+  const s = id ? state.suppliers.find((x) => x.id === id) : { name: '', company: '', phone: '', email: '', address: '' };
+
+  openModal(`
+    <div class="modal-header">
+      <div>
+        <h3>${id ? 'Edit Supplier' : 'Add New Supplier'}</h3>
+        <p>Register vendor contact details and procurement organization.</p>
+      </div>
+      <button class="modal-close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <form id="supplierForm">
+      <div class="form-grid">
+        <div class="form-group full-width">
+          <label class="form-label">Company / Business Name <span class="req">*</span></label>
+          <input type="text" name="company" class="form-control" required value="${esc(s.company)}" placeholder="e.g. TechWorld Supplies Pvt. Ltd.">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contact Person <span class="req">*</span></label>
+          <input type="text" name="name" class="form-control" required value="${esc(s.name)}" placeholder="e.g. Ramesh Chandra">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone Number <span class="req">*</span></label>
+          <input type="tel" name="phone" class="form-control" required value="${esc(s.phone)}" placeholder="e.g. 9000011111">
+        </div>
+        <div class="form-group full-width">
+          <label class="form-label">Email Address</label>
+          <input type="email" name="email" class="form-control" value="${esc(s.email || '')}" placeholder="contact@techworld.example">
+        </div>
+        <div class="form-group full-width">
+          <label class="form-label">Warehouse Address</label>
+          <textarea name="address" class="form-control" rows="2" placeholder="Industrial Area, City, State">${esc(s.address || '')}</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">${id ? 'Save Changes' : 'Save Supplier'}</button>
+      </div>
+    </form>
+  `);
+
+  $('#supplierForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {
+      company: fd.get('company').trim(),
+      name: fd.get('name').trim(),
+      phone: fd.get('phone').trim(),
+      email: fd.get('email').trim(),
+      address: fd.get('address').trim()
+    };
+
+    if (state.editingSupplierId) {
+      payload.id = state.editingSupplierId;
+      const res = await API.put('suppliers.php', payload);
+      if (res.success) {
+        showToast('Supplier profile updated.');
+        closeModal();
+        await loadSuppliers();
+      } else {
+        showToast(res.message, 'error');
+      }
+    } else {
+      const res = await API.post('suppliers.php', payload);
+      if (res.success) {
+        showToast('Supplier registered.');
+        closeModal();
+        await loadSuppliers();
+      } else {
+        showToast(res.message, 'error');
+      }
+    }
+  });
+}
+
+function deleteSupplier(id) {
+  const s = state.suppliers.find((x) => x.id === id);
+  if (!s) return;
+
+  showConfirm(
+    'Delete Supplier',
+    `Are you sure you want to remove supplier '${s.company}'?`,
+    async () => {
+      const res = await API.delete('suppliers.php', { id });
+      if (res.success) {
+        showToast(res.message);
+        await loadSuppliers();
+      } else {
+        showToast(res.message, 'error');
+      }
+    }
+  );
+}
+
+// Printable Invoice Modal
+async function showInvoiceModal(invoiceNo) {
+  const res = await API.get('sales.php', { invoice_no: invoiceNo });
+
+  if (!res.success || !res.data) {
+    showToast('Could not load invoice details.', 'error');
+    return;
+  }
+
+  const s = res.data;
+  const items = s.items || [];
+
+  const invoiceHtml = `
+    <div class="invoice-card" id="invoiceCardBox">
+      <div class="invoice-header-row">
+        <div>
+          <div class="invoice-brand-title">SmartStore</div>
+          <div class="invoice-sub">Inventory & Sales Management System</div>
+          <div class="invoice-sub" style="font-size:11px;margin-top:2px;">Project by Sagar Dhakal (Roll No: 24CS275)</div>
+        </div>
+        <div class="invoice-meta-info">
+          <strong>${esc(s.invoice_no)}</strong>
+          <div>Date: ${esc(s.sale_date || s.date)}</div>
+          <div>Customer: <b>${esc(s.customer_name || s.customer)}</b></div>
+          <div>Payment: ${esc((s.payment_method || 'cash').toUpperCase())}</div>
+        </div>
+      </div>
+
+      <table class="invoice-items-table">
+        <thead>
+          <tr>
+            <th style="text-align:left;">Item & SKU</th>
+            <th style="text-align:right;">Unit Price</th>
+            <th style="text-align:center;">Qty</th>
+            <th style="text-align:right;">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((i) => `
+            <tr>
+              <td>
+                <b>${esc(i.name || i.product_name)}</b>
+                ${i.sku ? `<div style="font-size:10px;color:#64748b;">SKU: ${esc(i.sku)}</div>` : ''}
+              </td>
+              <td style="text-align:right;">${money(i.price || i.unit_price)}</td>
+              <td style="text-align:center;">${i.qty || i.quantity}</td>
+              <td style="text-align:right;"><b>${money(i.subtotal)}</b></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div class="invoice-summary-box">
+        <div class="invoice-summary-row">
+          <span>Subtotal</span>
+          <b>${money(s.subtotal)}</b>
+        </div>
+        ${s.discount > 0 ? `
+          <div class="invoice-summary-row" style="color:var(--green-text);">
+            <span>Discount Applied</span>
+            <b>−${money(s.discount)}</b>
+          </div>
+        ` : ''}
+        <div class="invoice-summary-row">
+          <span>GST / Tax (${s.tax_rate || 5}%)</span>
+          <b>${money(s.tax_amount)}</b>
+        </div>
+        <div class="invoice-summary-row total">
+          <span>Grand Total</span>
+          <b>${money(s.grand_total || s.total)}</b>
+        </div>
+      </div>
+
+      <div class="invoice-footer-note">
+        Thank you for your business! · SmartStore Retail OS · Generated on ${new Date().toLocaleString('en-IN')}
+      </div>
+    </div>
+  `;
+
+  // Place into print area for browser print
+  const printArea = $('#invoicePrintArea');
+  if (printArea) printArea.innerHTML = invoiceHtml;
+
+  openModal(`
+    <div class="modal-header">
+      <div>
+        <h3>Tax Invoice: ${esc(s.invoice_no)}</h3>
+        <p>Verified sales record stored in MySQL database</p>
+      </div>
+      <button class="modal-close-btn" onclick="closeModal()">✕</button>
+    </div>
+    ${invoiceHtml}
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="window.print()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="16" height="16"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print Invoice
+      </button>
+      <button class="btn btn-primary" onclick="closeModal()">Close</button>
+    </div>
+  `);
+}
+
+// =========================================================================
+// EXPORTING DATA (CSV & JSON)
+// =========================================================================
+$('#exportJsonBtn')?.addEventListener('click', () => {
+  const exportPayload = {
+    exported_at: new Date().toISOString(),
+    system: 'SmartStore Review 02',
+    student: 'Sagar Dhakal (24CS275)',
+    products: state.products,
+    categories: state.categories,
+    customers: state.customers,
+    suppliers: state.suppliers,
+    sales: state.sales
+  };
+
+  const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `smartstore-export-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Database records exported to JSON.');
 });
-document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal();if(e.key==="n"&&e.ctrlKey){e.preventDefault();navigate("sales");}});
-$("#today").textContent=new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
 
-function renderAll(){
-  renderDashboard();renderProducts();renderInventory();renderPicker();renderCart();renderSales();renderCustomers();renderSuppliers();renderReports();
+$('#exportCsvBtn')?.addEventListener('click', () => {
+  if (!state.products.length) {
+    showToast('No products available to export.', 'warning');
+    return;
+  }
+
+  const headers = ['ID', 'Name', 'SKU', 'Category', 'Cost Price', 'Selling Price', 'Stock', 'Min Stock', 'Unit', 'Status'];
+  const rows = state.products.map((p) => [
+    p.id,
+    `"${p.name.replace(/"/g, '""')}"`,
+    `"${p.sku}"`,
+    `"${p.category}"`,
+    p.cost_price,
+    p.price,
+    p.stock,
+    p.min,
+    p.unit,
+    p.stock_status
+  ]);
+
+  const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `smartstore-products-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Products catalog exported to CSV.');
+});
+
+// =========================================================================
+// EVENT LISTENERS & FILTERING
+// =========================================================================
+$('#productSearchInput')?.addEventListener('input', () => {
+  clearTimeout(window.searchDebounce);
+  window.searchDebounce = setTimeout(loadProducts, 250);
+});
+
+$('#productCategoryFilter')?.addEventListener('change', loadProducts);
+$('#productStockFilter')?.addEventListener('change', loadProducts);
+$('#productSortFilter')?.addEventListener('change', loadProducts);
+
+$('#customerSearchInput')?.addEventListener('input', () => {
+  clearTimeout(window.custSearchDebounce);
+  window.custSearchDebounce = setTimeout(loadCustomers, 250);
+});
+
+$('#supplierSearchInput')?.addEventListener('input', () => {
+  clearTimeout(window.supSearchDebounce);
+  window.supSearchDebounce = setTimeout(loadSuppliers, 250);
+});
+
+// Global Search (in topbar)
+$('#globalSearchInput')?.addEventListener('input', (e) => {
+  const query = e.target.value.trim().toLowerCase();
+  if (!query) return;
+
+  if (state.activeSection !== 'products' && state.activeSection !== 'sales') {
+    navigate('products');
+  }
+
+  const prodInput = $('#productSearchInput');
+  if (prodInput) {
+    prodInput.value = query;
+    loadProducts();
+  }
+});
+
+// Button Bindings
+$('#openAddProductModalBtn')?.addEventListener('click', () => openProductModal());
+$('#openAddCustomerModalBtn')?.addEventListener('click', () => openCustomerModal());
+$('#openAddSupplierModalBtn')?.addEventListener('click', () => openSupplierModal());
+$('#openPurchaseRestockBtn')?.addEventListener('click', () => openRestockModal());
+$('#heroRestockBtn')?.addEventListener('click', () => openRestockModal());
+$('#openRestockModalBtn')?.addEventListener('click', () => openRestockModal());
+$('#importFakeApiBtn')?.addEventListener('click', () => openFakeApiModal());
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+  if (e.ctrlKey && e.key.toLowerCase() === 'n') {
+    e.preventDefault();
+    navigate('sales');
+  }
+});
+
+// =========================================================================
+// INITIAL APPLICATION BOOTSTRAP
+// =========================================================================
+async function initApp() {
+  await loadAllData();
 }
-renderAll();
+
+initApp();
