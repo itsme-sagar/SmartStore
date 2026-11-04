@@ -1,6 +1,42 @@
 # SmartStore – Inventory & Sales Management System
 ### Full-Stack Web Technologies Project (Review 02 Evaluation)
 
+## GitHub Pages: static demo
+
+The dashboard can run from GitHub Pages at **`https://itsme-sagar.github.io/SmartStore/`**. The HTML, CSS, and JavaScript asset paths are relative to the repository root, so the project works under GitHub's `/SmartStore/` repository path without a root-domain rewrite.
+
+GitHub Pages is a static host: it does not execute PHP, provide MySQL/MariaDB, or connect to a private database. On GitHub Pages the app automatically uses fictional sample records and a browser-side JavaScript data adapter. Product/customer/supplier edits, stock adjustments, restocks, and sales work as a demo and are saved in that browser's `localStorage` where available; they are not sent to a server, shared with other visitors, or suitable for real business records. Clearing this site's browser storage restores the original sample data. The static demo uses a built-in mock catalog and does not require an external API.
+
+When served from GitHub Pages, the connection indicator reads **Static Demo**. For a local static preview, append `?demo=1` to the page URL. When served from XAMPP without that query, the existing PHP/MySQL backend remains the active data source. The PHP backend source is preserved, but its API routes are not available on GitHub Pages.
+
+### PHP and database dependencies
+
+The existing backend is PHP source, not a set of Pages-compatible serverless routes. It requires a PHP host with PDO's MySQL driver and a reachable MySQL/MariaDB database. The application uses these API endpoints:
+
+| Endpoint | Purpose |
+|---|---|
+| `api/status.php` | PHP and database health/status |
+| `api/products.php` | Product catalog CRUD, filtering, and sorting |
+| `api/categories.php` | Product category data |
+| `api/customers.php` | Customer CRM CRUD and purchase totals |
+| `api/suppliers.php` | Supplier CRUD and purchase summaries |
+| `api/sales.php` | Sales checkout, transaction history, and invoice details |
+| `api/analytics.php` | Dashboard KPIs, chart data, alerts, and reports |
+| `api/stock.php` | Stock changes and audit history |
+| `api/purchases.php` | Supplier restocking transactions |
+| `api/fake-api.php` | External catalog staging and product import (PHP mode) |
+| `api/setup.php` | Local database setup and health checks |
+
+Database connections are configured in `config/database.php` using environment overrides. Do not publish `.env` files, real credentials, production database exports, logs, backups, or private customer data. Database/schema and dump files are excluded by `.gitignore`.
+
+### Enable GitHub Pages
+
+1. Open the repository on GitHub and select **Settings**.
+2. In the left sidebar, select **Pages** (under **Code and automation**).
+3. Under **Build and deployment**, choose **Deploy from a branch**.
+4. Set the branch to **`main`** and the folder to **`/ (root)`**, then click **Save**.
+5. Wait for the Pages deployment to finish. Visit **`https://itsme-sagar.github.io/SmartStore/`**; GitHub also shows the published URL in **Settings → Pages**.
+
 ---
 
 ## 1. Student & Project Identification

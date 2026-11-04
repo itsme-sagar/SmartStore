@@ -13,6 +13,10 @@ ib_logfile*
 aria_log*
 /mysql/data/
 /data/
+/database/*.sql
+/database/*.db
+/database/*.sqlite
+/database/dumps/
 
 # Local backups and generated dependencies
 /backups/

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="SmartStore - Modern Inventory and Sales Management System built with HTML5, CSS3, Vanilla JavaScript, PHP 8 and MySQL.">
+  <meta name="description" content="SmartStore - Inventory and sales management dashboard with a browser-based static demo and optional PHP/MySQL backend.">
   <meta name="author" content="Sagar Dhakal (Roll No: 24CS275) - BE CSE IIIrd Year">
   <title>SmartStore — Inventory & Sales Management</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -65,7 +65,7 @@
             <span class="pulse-dot" id="dbPulseDot"></span>
             <span id="dbStatusText">Connecting...</span>
           </div>
-          <div class="connection-sub" id="dbStatusSub">Checking MySQL status</div>
+          <div class="connection-sub" id="dbStatusSub">Checking application mode</div>
         </div>
 
         <div class="student-tag">
@@ -96,7 +96,7 @@
           </div>
 
           <div class="badge healthy" id="liveBadge" title="Backend connection status">
-            <span class="pulse-dot"></span> <span id="liveBadgeText">MySQL Live</span>
+            <span class="pulse-dot"></span> <span id="liveBadgeText">Loading</span>
           </div>
 
           <button class="action-icon-btn" id="themeToggleBtn" title="Toggle Light/Dark Theme" aria-label="Toggle Theme">
@@ -200,9 +200,9 @@
               <div class="card-header">
                 <div class="card-title-group">
                   <h3>7-Day Sales Performance</h3>
-                  <p>Daily revenue trends based on real database records</p>
+                  <p>Daily revenue trends from the active data source</p>
                 </div>
-                <span class="badge healthy">Live MySQL</span>
+                <span class="badge healthy" id="salesDataBadge">Live data</span>
               </div>
               <div class="chart-container" id="dashboardSalesChart">
                 <!-- Bar chart dynamic columns -->
@@ -246,7 +246,7 @@
             <div class="card-header">
               <div class="card-title-group">
                 <h3>Recent Sales Invoices</h3>
-                <p>Latest transactions recorded in MySQL database</p>
+                <p>Latest completed transactions</p>
               </div>
               <button class="btn btn-sm btn-outline" data-navigate="sales">View All Sales →</button>
             </div>
@@ -333,7 +333,7 @@
                   </tr>
                 </thead>
                 <tbody id="productsTableBody">
-                  <tr><td colspan="8" class="empty-state">Loading products from MySQL...</td></tr>
+                  <tr><td colspan="8" class="empty-state">Loading products...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -395,7 +395,7 @@
             <div class="card-header">
               <div class="card-title-group">
                 <h3>Quick Stock Adjustment Table</h3>
-                <p>Click adjust buttons (+/-) to safely update quantity and write an audit record to MySQL.</p>
+                <p>Click adjust buttons (+/-) to update quantities and record each stock movement.</p>
               </div>
             </div>
             <div class="table-responsive">
@@ -514,7 +514,7 @@
             <div class="card-header">
               <div class="card-title-group">
                 <h3>Sales Ledger History</h3>
-                <p>All completed customer invoices recorded in MySQL</p>
+                <p>All completed customer invoices</p>
               </div>
             </div>
             <div class="table-responsive">
@@ -641,7 +641,7 @@
           <div class="section-header">
             <div class="section-title">
               <h3>Analytics & Intelligence Reports</h3>
-              <p>Business analytics computed in real-time from MySQL tables. Export data to JSON or CSV.</p>
+              <p>Business analytics update from the active data source. Export data to JSON or CSV.</p>
             </div>
             <div class="section-actions">
               <button class="btn btn-secondary" id="exportCsvBtn">
@@ -771,6 +771,7 @@
   <div class="toast-container" id="toastContainer"></div>
 
   <!-- APPLICATION SCRIPT -->
+  <script src="static-demo.js"></script>
   <script src="index.js"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
  * Student: Sagar Dhakal | Roll No: 24CS275 | BE CSE IIIrd Year
  * Subject: U21CS501 & U21CS504 Web Technologies Theory and Lab
  * 
- * Connected directly to PHP 8.2 & MySQL/MariaDB JSON endpoints.
+ * Uses PHP/MySQL endpoints locally and fictional browser data on GitHub Pages.
  */
 
 // Global Application State
@@ -27,6 +27,7 @@ const state = {
   editingCustomerId: null,
   editingSupplierId: null
 };
+const DEMO_MODE = Boolean(window.SMARTSTORE_DEMO_MODE);
 
 // DOM Selectors Helper
 const $ = (selector) => document.querySelector(selector);
@@ -116,6 +117,8 @@ const API = {
   baseUrl: 'api',
 
   async get(endpoint, params = {}) {
+    if (DEMO_MODE) return window.SmartStoreDemo.handle(endpoint, 'GET', params);
+
     const url = new URL(`${this.baseUrl}/${endpoint}`, window.location.href);
     Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') {
@@ -135,6 +138,8 @@ const API = {
   },
 
   async post(endpoint, body = {}) {
+    if (DEMO_MODE) return window.SmartStoreDemo.handle(endpoint, 'POST', {}, body);
+
     try {
       const res = await fetch(`${this.baseUrl}/${endpoint}`, {
         method: 'POST',
@@ -152,6 +157,8 @@ const API = {
   },
 
   async put(endpoint, body = {}) {
+    if (DEMO_MODE) return window.SmartStoreDemo.handle(endpoint, 'PUT', {}, body);
+
     try {
       const res = await fetch(`${this.baseUrl}/${endpoint}`, {
         method: 'PUT',
@@ -169,6 +176,8 @@ const API = {
   },
 
   async delete(endpoint, params = {}) {
+    if (DEMO_MODE) return window.SmartStoreDemo.handle(endpoint, 'DELETE', params);
+
     const url = new URL(`${this.baseUrl}/${endpoint}`, window.location.href);
     Object.entries(params).forEach(([k, v]) => url.searchParams.append(k, v));
 
@@ -288,7 +297,31 @@ async function checkSystemStatus() {
   const liveBadge = $('#liveBadge');
   const liveBadgeText = $('#liveBadgeText');
 
+  if (DEMO_MODE) {
+    state.connection = {
+      connected: false,
+      database: '',
+      version: '',
+      error: 'Static demo uses fictional sample data.'
+    };
+    if (dot) dot.className = 'pulse-dot';
+    if (text) text.textContent = 'Static Demo';
+    if (sub) sub.textContent = res.data?.storage === 'page memory'
+      ? 'Sample data · changes last this session'
+      : 'Sample data · saved in this browser';
+    if (liveBadge) liveBadge.className = 'badge info';
+    if (liveBadge) liveBadge.title = 'Static demo data; no backend connection';
+    if (liveBadgeText) liveBadgeText.textContent = 'Sample data';
+    const salesBadge = $('#salesDataBadge');
+    if (salesBadge) {
+      salesBadge.className = 'badge info';
+      salesBadge.textContent = 'Static demo';
+    }
+    return;
+  }
+
   if (res.success && res.data?.status === 'healthy') {
+    if (liveBadge) liveBadge.title = 'Backend connection status';
     state.connection = {
       connected: true,
       database: res.data.database,
@@ -1025,7 +1058,7 @@ function openProductModal(id = null) {
     <div class="modal-header">
       <div>
         <h3>${id ? 'Edit Product' : 'Add New Product'}</h3>
-        <p>Ensure SKU is unique. Data will be saved directly into MySQL database.</p>
+        <p>${DEMO_MODE ? 'Sample data changes are saved in this browser only.' : 'Ensure SKU is unique. Data will be saved directly into MySQL database.'}</p>
       </div>
       <button class="modal-close-btn" onclick="closeModal()">✕</button>
     </div>
@@ -1276,12 +1309,12 @@ async function openFakeApiModal() {
     <div class="modal-header">
       <div>
         <h3>Import from External Mock/Fake API</h3>
-        <p>Staged external catalogue from Fake API. Review and click "Import to MySQL" to store verified records.</p>
+        <p>${DEMO_MODE ? 'Fictional sample catalog. Add selected items to this browser demo.' : 'Staged external catalogue from Fake API. Review and click "Import to MySQL" to store verified records.'}</p>
       </div>
       <button class="modal-close-btn" onclick="closeModal()">✕</button>
     </div>
     <div id="fakeApiCatalogArea" style="min-height:200px;">
-      <div class="empty-state">Connecting to External Product Catalog API...</div>
+      <div class="empty-state">${DEMO_MODE ? 'Loading built-in sample catalog...' : 'Connecting to External Product Catalog API...'}</div>
     </div>
   `);
 
@@ -1323,7 +1356,7 @@ async function openFakeApiModal() {
                 <td>${item.stock_quantity}</td>
                 <td>
                   <button class="btn btn-sm btn-primary" onclick="importSingleFakeItem(${idx})">
-                    Import to MySQL
+                    ${DEMO_MODE ? 'Add to demo' : 'Import to MySQL'}
                   </button>
                 </td>
               </tr>
@@ -1351,9 +1384,9 @@ window.importSingleFakeItem = async function(index) {
 
   const res = await API.post('fake-api.php', item);
   if (res.success) {
-    showToast(`'${item.name}' imported and stored into MySQL!`);
+    showToast(DEMO_MODE ? `'${item.name}' added to the browser demo.` : `'${item.name}' imported and stored into MySQL!`);
     if (row) {
-      row.innerHTML = `<td colspan="6" style="color:var(--green);font-weight:600;padding:12px 16px;">✓ Successfully imported as product ID #${res.data?.id} (${esc(res.data?.sku)}) into MySQL.</td>`;
+      row.innerHTML = `<td colspan="6" style="color:var(--green);font-weight:600;padding:12px 16px;">✓ ${DEMO_MODE ? 'Added' : 'Successfully imported'} as product ID #${res.data?.id} (${esc(res.data?.sku)}) ${DEMO_MODE ? 'to this browser demo' : 'into MySQL'}.</td>`;
     }
     await Promise.all([loadProducts(), loadCategories(), loadAnalytics()]);
   } else {
@@ -1636,7 +1669,7 @@ async function showInvoiceModal(invoiceNo) {
     <div class="modal-header">
       <div>
         <h3>Tax Invoice: ${esc(s.invoice_no)}</h3>
-        <p>Verified sales record stored in MySQL database</p>
+        <p>${DEMO_MODE ? 'Fictional demo invoice saved in this browser' : 'Verified sales record stored in MySQL database'}</p>
       </div>
       <button class="modal-close-btn" onclick="closeModal()">✕</button>
     </div>
@@ -1673,7 +1706,7 @@ $('#exportJsonBtn')?.addEventListener('click', () => {
   a.download = `smartstore-export-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast('Database records exported to JSON.');
+  showToast(DEMO_MODE ? 'Demo records exported to JSON.' : 'Database records exported to JSON.');
 });
 
 $('#exportCsvBtn')?.addEventListener('click', () => {
